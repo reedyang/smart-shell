@@ -18,8 +18,8 @@ ds/
 
 ### 1. 运行AI Agent
 ```bash
-python run_agent.py                    # 在当前目录运行
-python run_agent.py /path/to/directory # 在指定目录运行
+python run_agent.py       # 使用默认AI模型
+python run_agent.py model # 使用指定的AI模型
 ```
 
 ### 2. 运行演示
@@ -27,12 +27,10 @@ python run_agent.py /path/to/directory # 在指定目录运行
 python run_demo.py
 ```
 
-### 3. 直接运行（在agent目录中）
+### 3. 运行测试
 ```bash
 cd agent
-python file_manager_agent.py          # 运行主程序
-python demo_file_manager.py           # 运行演示
-python test_new_features.py           # 运行测试
+python test_new_features.py
 ```
 
 ## 新功能特性

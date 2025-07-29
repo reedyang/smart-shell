@@ -53,7 +53,8 @@ ollama pull mistral
 
 ### 启动Agent
 ```bash
-python file_manager_agent.py
+python run_agent.py       # 使用默认AI模型
+python run_agent.py model # 使用指定的AI模型
 ```
 
 ### 对话示例
