@@ -49,7 +49,21 @@ class FileManagerAgent:
 请按照以下格式回复：
 - 如果用户想执行文件操作，请在回复中包含JSON格式的操作指令
 - JSON格式：{"action": "操作类型", "params": {"参数名": "参数值"}}
-- 支持的操作类型：list, rename, move, delete, mkdir, info, cd
+- 支持的操作类型：list, rename, move, delete, mkdir, info, cd, batch
+
+批量命令格式：
+- {"action": "batch", "params": {"commands": [命令1, 命令2, ...]}}
+  例如：
+  {"action": "batch", "params": {"commands": [
+    {"action": "move", "params": {"source": "a.txt", "destination": "bak/"}},
+    {"action": "delete", "params": {"path": "b.txt", "confirmed": true}}
+  ]}}
+批量命令会顺序执行所有子命令，并将所有结果一并返回。
+批量结果格式：
+- {"success": true, "results": [
+    {"action": "move", "result": {move结果}},
+    {"action": "delete", "result": {delete结果}}
+  ]}
 
 列表命令使用规则：
 - 列出所有文件：{"action": "list", "params": {}} 
@@ -76,6 +90,8 @@ class FileManagerAgent:
 
 转换媒体文件格式：
 - {"action": "convert", "params": { "source": "源文件路径", "target": "目标文件路径", "options": "除了源文件和目标文件之外的其他ffmpeg命令参数, 不包括ffmpeg本身"}}
+- 不支持通配符指定文件名来批量转换
+- target只能是文件，不能是目录
 
 总结文件内容:
 - {"action": "summarize", "params": {"path": "文件路径"}}
@@ -92,6 +108,7 @@ class FileManagerAgent:
 - 当用户说"删除并确认"或"强制删除"时，设置 "confirmed": true
 - 只把包含通配符"*"的用户输入字串当作过滤条件，否则可以考虑作为目录名，文件名或者其它信息
 - 如果用户需要转换媒体文件格式，使用convert命令
+- 如果用户需要批量执行多个命令，并且执行这些命令的前提都已具备，使用batch命令
 
 严格服从:
 - 如果用户的指令需要分多步完成，一次只执行一步动作，等待动作返回的结果再进行下一步，直到完成所有步骤。完成所有步骤后输出'{"action": "done"}'
@@ -698,18 +715,30 @@ big_image.jpg
             return {"success": False, "error": f"总结文件失败: {str(e)}"}
     
     def execute_command(self, command: Dict) -> Dict[str, Any]:
-        """执行AI生成的命令"""
+        """执行AI生成的命令，支持批量命令"""
         action = command.get("action")
         params = command.get("params", {})
-        
+
+        if action == "batch":
+            commands = params.get("commands", [])
+            results = []
+            all_success = True
+            for subcmd in commands:
+                sub_action = subcmd.get("action")
+                sub_result = self.execute_command(subcmd)
+                results.append({"action": sub_action, "result": sub_result})
+                if not sub_result.get("success", False):
+                    all_success = False
+            return {"success": all_success, "results": results}
+
         if action == "list":
             path = params.get("path")
             file_filter = params.get("filter")
             smart_filter = params.get("smart_filter")  # 智能过滤条件
-            
+
             # 首先获取所有文件
             result = self.list_directory(path, file_filter)
-            
+
             if result["success"]:
                 # 如果有智能过滤条件，使用AI进行筛选
                 if smart_filter:
@@ -717,7 +746,7 @@ big_image.jpg
                     filtered_result = self.intelligent_filter(result, smart_filter)
                     if filtered_result["success"]:
                         result = filtered_result
-                
+
                 filter_info = result.get("filter_info", "")
                 smart_info = f" [智能过滤: {smart_filter}]" if smart_filter else ""
                 print(f"\n📁 目录内容 ({result['path']}){filter_info}{smart_info}:")
@@ -733,53 +762,53 @@ big_image.jpg
                     print(f"🧠 智能过滤条件: {smart_filter}")
             else:
                 print(f"❌ {result['error']}")
-            
+
             return result
-            
+
         elif action == "cd":
             path = params.get("path", "")
             result = self.change_directory(path)
-            
+
             if result["success"]:
                 print(f"✅ {result['message']}")
             else:
                 print(f"❌ {result['error']}")
-            
+
             return result
-            
+
         elif action == "rename":
             old_name = params.get("old_name")
             new_name = params.get("new_name")
             if old_name and new_name:
                 result = self.rename_file(old_name, new_name)
-                
+
                 if result["success"]:
                     print(f"✅ {result['message']}")
                 else:
                     print(f"❌ {result['error']}")
-                
+
                 return result
-                
+
         elif action == "move":
             source = params.get("source")
             destination = params.get("destination")
             if source and destination:
                 result = self.move_file(source, destination)
-                
+
                 if result["success"]:
                     print(f"✅ {result['message']}")
                 else:
                     print(f"❌ {result['error']}")
-                
+
                 return result
-                
+
         elif action == "delete":
             # 支持多种参数名: file_name, path, name
             file_name = params.get("file_name") or params.get("path") or params.get("name")
             confirmed = params.get("confirmed", False)
             if file_name:
                 result = self.delete_file(file_name, confirmed)
-                
+
                 if result["success"]:
                     print(f"✅ {result['message']}")
                 elif result.get("confirmation_needed"):
@@ -787,30 +816,30 @@ big_image.jpg
                     print(f"💡 如需确认删除，请使用：删除{file_name}并确认")
                 else:
                     print(f"❌ {result['error']}")
-                
+
                 return result
             else:
                 print("❌ 删除命令缺少文件名参数")
                 return {"success": False, "error": "缺少文件名参数"}
-                
+
         elif action == "mkdir":
             path = params.get("path")
             if path:
                 result = self.create_directory(path)
-                
+
                 if result["success"]:
                     print(f"✅ {result['message']}")
                 else:
                     print(f"❌ {result['error']}")
-                
+
                 return result
-                
+
         elif action == "info":
             # 支持多种参数名: file_name, path, name
             file_name = params.get("file_name") or params.get("path") or params.get("name")
             if file_name:
                 result = self.get_file_info(file_name)
-                
+
                 if result["success"]:
                     print(f"\n📋 文件信息：")
                     print(f"名称: {result['name']}")
@@ -822,12 +851,12 @@ big_image.jpg
                     print(f"完整路径: {result['full_path']}")
                 else:
                     print(f"❌ {result['error']}")
-                
+
                 return result
             else:
                 print("❌ 查看文件信息命令缺少文件名参数")
                 return {"success": False, "error": "缺少文件名参数"}
-        
+
         elif action == "convert":
             source = params.get("source")
             target = params.get("target")
