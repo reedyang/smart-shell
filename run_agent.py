@@ -3,8 +3,8 @@
 文件管理AI Agent主启动脚本
 
 用法：
-    python run_agent.py              # 在当前目录运行
-    python run_agent.py /path/to/dir # 在指定目录运行
+    python run_agent.py       # 使用默认AI模型
+    python run_agent.py model # 使用指定的AI模型
 """
 
 import sys
@@ -22,16 +22,14 @@ def main():
     """主函数"""
     print("🚀 启动文件管理AI Agent...")
     
+    work_directory = None
+    
     # 指定使用的模型
     model_name = "gemma3:4b"
     
     # 处理命令行参数
-    work_directory = None
     if len(sys.argv) > 1:
-        work_directory = sys.argv[1]
-        if not Path(work_directory).exists():
-            print(f"❌ 指定的目录不存在: {work_directory}")
-            return 1
+        model_name = sys.argv[1]
     
     # 检查Ollama是否可用
     try:
@@ -53,8 +51,8 @@ def main():
         if model_name not in available_models:
             print(f"⚠️ 指定模型 {model_name} 不可用")
             if available_models:
-                print(f"💡 可以使用: {available_models[0]}")
-                print(f"💡 建议运行: ollama pull {model_name}")
+                model_name = available_models[0]  # 使用第一个可用模型
+                print(f"💡 使用默认模型: {model_name}")
             else:
                 print("❌ 没有可用的模型")
                 return 1
