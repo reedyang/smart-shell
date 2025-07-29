@@ -80,6 +80,10 @@ class FileManagerAgent:
 总结文件内容:
 - {"action": "summarize", "params": {"path": "文件路径"}}
 
+移动文件和文件夹:
+- {"action": "move", "params": {"source": "源文件或目录路径", "destination": "目标目录路径"}}
+- source支持通配符批量移动，如 "source": "*.txt" 会匹配所有txt文件, "source": "?.txt" 会匹配所有单字符命名的txt文件
+
 重要：
 - 不要"预测"或"编造"文件列表，系统会执行你的命令并显示实际结果
 - 当执行列表命令时，只提供JSON指令和说明，不要列出具体的文件名
@@ -88,6 +92,9 @@ class FileManagerAgent:
 - 当用户说"删除并确认"或"强制删除"时，设置 "confirmed": true
 - 只把包含通配符"*"的用户输入字串当作过滤条件，否则可以考虑作为目录名，文件名或者其它信息
 - 如果用户需要转换媒体文件格式，使用convert命令
+
+严格服从:
+- 如果用户的指令需要分多步完成，一次只执行一步动作，等待动作返回的结果再进行下一步，直到完成所有步骤。完成所有步骤后输出'{"action": "done"}'
 
 当你收到操作结果时，请根据结果分析情况并提供进一步的建议或操作。
 
@@ -276,49 +283,6 @@ class FileManagerAgent:
                     return ai_response
         except Exception as e:
             error_msg = f"调用大模型API时出错: {str(e)} (provider: {self.provider}, model: {self.model_name})"
-            return error_msg
-            
-            # 构建对话历史
-            messages = [{"role": "system", "content": self.system_prompt}]
-            
-            # 添加对话历史
-            for msg in self.conversation_history[-5:]:  # 只保留最近5轮对话
-                messages.append(msg)
-            
-            # 构建当前用户输入，包含上下文信息
-            current_input = f"当前工作目录: {self.work_directory}\n"
-            
-            # 添加最近的操作结果作为上下文
-            if self.operation_results:
-                current_input += f"最近的操作结果: {self.operation_results[-1]}\n"
-            
-            if context:
-                current_input += f"操作上下文: {context}\n"
-            
-            current_input += f"用户输入: {user_input}"
-            
-            # 添加当前用户输入
-            messages.append({"role": "user", "content": current_input})
-            
-            # 调用Ollama API
-            response = ollama.chat(
-                model=self.model_name,
-                messages=messages,
-                stream=False
-            )
-            
-            ai_response = response['message']['content']
-            
-            # 保存对话历史
-            self.conversation_history.append({"role": "user", "content": user_input})
-            self.conversation_history.append({"role": "assistant", "content": ai_response})
-            
-            return ai_response
-            
-        except Exception as e:
-            error_msg = f"调用Ollama API时出错: {str(e)} (使用模型: {self.model_name})"
-            if "status code: 400" in str(e) or "model is required" in str(e):
-                error_msg += f"\n💡 建议: 请确保模型 '{self.model_name}' 已安装，运行: ollama pull {self.model_name}"
             return error_msg
 
     def extract_json_command(self, text: str) -> Optional[Dict]:
@@ -554,26 +518,47 @@ big_image.jpg
             return {"success": False, "error": f"重命名失败: {str(e)}"}
 
     def move_file(self, source: str, destination: str) -> Dict[str, Any]:
-        """移动文件或文件夹"""
+        """移动文件或文件夹，支持通配符批量移动"""
+        import glob
         try:
-            source_path = self.work_directory / source
-            
-            if destination.startswith("/") or destination.startswith("\\") or (len(destination) > 1 and destination[1] == ":"):
-                dest_path = Path(destination)
+            # 判断是否为通配符批量移动
+            if '*' in source or '?' in source:
+                pattern = str((self.work_directory / source).resolve())
+                matched_files = [Path(p) for p in glob.glob(pattern) if Path(p).is_file()]
+                if not matched_files:
+                    return {"success": False, "error": f"未找到匹配的文件: {source}"}
+                if destination.startswith("/") or destination.startswith("\\") or (len(destination) > 1 and destination[1] == ":"):
+                    dest_path = Path(destination)
+                else:
+                    dest_path = self.work_directory / destination
+                dest_path.mkdir(parents=True, exist_ok=True)
+                moved = []
+                for file_path in matched_files:
+                    target = dest_path / file_path.name
+                    shutil.move(str(file_path), str(target))
+                    moved.append(file_path.name)
+                return {
+                    "success": True,
+                    "source": source,
+                    "destination": str(dest_path),
+                    "moved_files": moved,
+                    "message": f"成功批量移动 {len(moved)} 个文件到 '{dest_path}'"
+                }
             else:
-                dest_path = self.work_directory / destination
-            
-            if not source_path.exists():
-                return {"success": False, "error": f"源文件 '{source}' 不存在"}
-            
-            shutil.move(str(source_path), str(dest_path))
-            return {
-                "success": True,
-                "source": source,
-                "destination": str(dest_path),
-                "message": f"成功将 '{source}' 移动到 '{dest_path}'"
-            }
-            
+                source_path = self.work_directory / source
+                if destination.startswith("/") or destination.startswith("\\") or (len(destination) > 1 and destination[1] == ":"):
+                    dest_path = Path(destination)
+                else:
+                    dest_path = self.work_directory / destination
+                if not source_path.exists():
+                    return {"success": False, "error": f"源文件 '{source}' 不存在"}
+                shutil.move(str(source_path), str(dest_path))
+                return {
+                    "success": True,
+                    "source": source,
+                    "destination": str(dest_path),
+                    "message": f"成功将 '{source}' 移动到 '{dest_path}'"
+                }
         except Exception as e:
             return {"success": False, "error": f"移动失败: {str(e)}"}
 
@@ -809,9 +794,9 @@ big_image.jpg
                 return {"success": False, "error": "缺少文件名参数"}
                 
         elif action == "mkdir":
-            dir_name = params.get("dir_name")
-            if dir_name:
-                result = self.create_directory(dir_name)
+            path = params.get("path")
+            if path:
+                result = self.create_directory(path)
                 
                 if result["success"]:
                     print(f"✅ {result['message']}")
@@ -875,7 +860,7 @@ big_image.jpg
         return {"success": False, "error": "未知的操作类型"}
 
     def run(self):
-        """运行AI Agent主循环"""
+        """运行AI Agent主循环，支持自动多轮命令执行，AI可根据上次执行结果继续生成命令，遇到{"action": "done"}时终止。"""
         print("🤖 增强版文件管理AI Agent已启动")
         print(f"📁 当前工作目录: {self.work_directory}")
         print(f"🧠 使用模型: {self.model_name}")
@@ -883,34 +868,40 @@ big_image.jpg
         print("🔄 支持切换目录和各种文件管理操作")
         print("🎬 支持媒体文件格式转换（需提前安装ffmpeg并配置PATH）")
         print("=" * 80)
-        
+
         while True:
             try:
                 # 显示完整路径
                 user_input = input(f"\n👤 您 [{str(self.work_directory)}]: ").strip()
-                
                 if user_input.lower() in ['exit', 'quit', '退出']:
                     print("👋 再见！")
                     break
-                
                 if not user_input:
                     continue
-                
-                # 获取AI回复
-                print("🤖 AI正在思考...")
-                # 流式输出AI回复
-                stream_gen = self.call_ai(user_input, stream=True)
-                ai_response = ""
-                try:
-                    for chunk in stream_gen:
-                        print(chunk, end="", flush=True)
-                        ai_response += chunk
-                except Exception as e:
-                    print(f"\n❌ AI流式输出异常: {e}")
-                print()
-                # 提取并执行命令
-                command = self.extract_json_command(ai_response)
-                if command:
+
+                last_result = None
+                next_input = user_input
+                while True:
+                    # 获取AI回复
+                    print("🤖 AI正在思考...")
+                    # 流式输出AI回复
+                    stream_gen = self.call_ai(next_input, context=json.dumps(last_result, ensure_ascii=False) if last_result else "", stream=True)
+                    ai_response = ""
+                    try:
+                        for chunk in stream_gen:
+                            print(chunk, end="", flush=True)
+                            ai_response += chunk
+                    except Exception as e:
+                        print(f"\n❌ AI流式输出异常: {e}")
+                    print()
+                    # 提取并执行命令
+                    command = self.extract_json_command(ai_response)
+                    if not command:
+                        print("❌ 未检测到有效命令，终止本轮。")
+                        break
+                    if command.get("action") == "done":
+                        print("✅ AI已声明所有操作完成。");
+                        break
                     print("\n⚡ 执行操作...")
                     result = self.execute_command(command)
                     # 保存操作结果
@@ -919,10 +910,9 @@ big_image.jpg
                         "result": result,
                         "timestamp": datetime.now().isoformat()
                     })
-                    # 简化后续建议逻辑，避免无限循环
-                    if result.get("success") and result.get("total_files", 0) > 10:
-                        print(f"💡 提示: 发现 {result.get('total_files', 0)} 个文件，您可以使用 'cd' 切换目录或执行其他操作")
-                
+                    last_result = result
+                    # 若AI未自动输出done，则继续将本次结果传给AI生成下一个命令
+                    next_input = "命令执行结果：" + json.dumps(result, ensure_ascii=False)
             except KeyboardInterrupt:
                 print("\n👋 程序已中断，再见！")
                 break
