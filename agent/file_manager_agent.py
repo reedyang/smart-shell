@@ -44,6 +44,9 @@ class FileManagerAgent:
 - 列出所有文件：{"action": "list", "params": {}} 
 - 当用户说"列举所有文件"、"显示所有文件"、"查看所有文件"、"列出文件"时，使用空参数
 
+列举指定目录下的文件：
+{"action": "list", "params": {"path": "指定目录路径"}}
+
 简单过滤（使用filter参数）：
 - 按文件扩展名：{"action": "list", "params": {"filter": "txt"}}
 - 按文件名关键词：{"action": "list", "params": {"filter": "关键词"}}
@@ -64,6 +67,7 @@ class FileManagerAgent:
 - 等待系统执行命令后，你会收到实际的操作结果用于后续建议
 - 删除操作需要确认：使用 {"action": "delete", "params": {"path": "文件名", "confirmed": true}}
 - 当用户说"删除并确认"或"强制删除"时，设置 "confirmed": true
+- 只把包含通配符"*"的用户输入字串当作过滤条件，否则可以考虑作为目录名，文件名或者其它信息
 
 当你收到操作结果时，请根据结果分析情况并提供进一步的建议或操作。
 
