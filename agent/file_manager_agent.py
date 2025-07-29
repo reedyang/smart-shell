@@ -8,6 +8,7 @@ import shutil
 from datetime import datetime
 
 class FileManagerAgent:
+
     def __init__(self, model_name: str = "gemma3:4b", work_directory: Optional[str] = None):
         """
         初始化文件管理AI Agent
@@ -34,6 +35,7 @@ class FileManagerAgent:
 5. 创建新文件夹
 6. 查看文件信息
 7. 切换工作目录
+8. 转换媒体文件格式
 
 请按照以下格式回复：
 - 如果用户想执行文件操作，请在回复中包含JSON格式的操作指令
@@ -45,7 +47,7 @@ class FileManagerAgent:
 - 当用户说"列举所有文件"、"显示所有文件"、"查看所有文件"、"列出文件"时，使用空参数
 
 列举指定目录下的文件：
-{"action": "list", "params": {"path": "指定目录路径"}}
+- {"action": "list", "params": {"path": "指定目录路径"}}
 
 简单过滤（使用filter参数）：
 - 按文件扩展名：{"action": "list", "params": {"filter": "txt"}}
@@ -58,6 +60,9 @@ class FileManagerAgent:
 - 复合条件：{"action": "list", "params": {"smart_filter": "最近一周修改的大文件"}}
 - 任何涉及文件属性比较、日期计算、大小判断的复杂条件
 
+转换媒体文件格式：
+- {"action": "convert", "params": { "source": "源文件路径", "target": "目标文件路径", "options": "除了源文件和目标文件之外的其他ffmpeg命令参数, 不包括ffmpeg本身"}}
+
 关键判断：如果过滤条件涉及时间、大小、日期比较或复杂逻辑，必须使用smart_filter！
 - 除了JSON指令外，还要给出自然语言的解释
 
@@ -68,6 +73,7 @@ class FileManagerAgent:
 - 删除操作需要确认：使用 {"action": "delete", "params": {"path": "文件名", "confirmed": true}}
 - 当用户说"删除并确认"或"强制删除"时，设置 "confirmed": true
 - 只把包含通配符"*"的用户输入字串当作过滤条件，否则可以考虑作为目录名，文件名或者其它信息
+- 如果用户需要转换媒体文件格式，使用convert命令
 
 当你收到操作结果时，请根据结果分析情况并提供进一步的建议或操作。
 
@@ -484,6 +490,33 @@ big_image.jpg
         except Exception as e:
             return {"success": False, "error": f"获取文件信息失败: {str(e)}"}
 
+    def convert_media(self, source: str, target: str, options: Optional[str] = None) -> Dict[str, Any]:
+        """调用ffmpeg转换媒体文件格式"""
+        import subprocess
+        if not source or not target:
+            return {"success": False, "error": "缺少 source 或 target 参数"}
+        
+        # 检查源文件是否存在
+        source_path = self.work_directory / source
+        if not source_path.exists():
+            return {"success": False, "error": f"源文件 '{source}' 不存在"}
+
+        ffmpeg_cmd = ["ffmpeg", "-y", "-i", source]
+        if options:
+            ffmpeg_cmd += options.split()
+        ffmpeg_cmd.append(target)
+        print(f"🔄 正在执行 ffmpeg 命令: {' '.join(ffmpeg_cmd)}")
+        try:
+            result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                return {"success": True, "message": "媒体文件转换成功"}
+            else:
+                return {"success": False, "error": f"ffmpeg 执行失败: {result.stderr}"}
+        except FileNotFoundError:
+            return {"success": False, "error": "未检测到 ffmpeg，请确保已安装并配置好 PATH 环境变量"}
+        except Exception as e:
+            return {"success": False, "error": f"ffmpeg 执行异常: {str(e)}"}
+    
     def execute_command(self, command: Dict) -> Dict[str, Any]:
         """执行AI生成的命令"""
         action = command.get("action")
@@ -615,6 +648,21 @@ big_image.jpg
                 print("❌ 查看文件信息命令缺少文件名参数")
                 return {"success": False, "error": "缺少文件名参数"}
         
+        elif action == "convert":
+            source = params.get("source")
+            target = params.get("target")
+            options = params.get("options")
+            if source and target:
+                result = self.convert_media(source, target, options)
+                if result["success"]:
+                    print(f"✅ {result['message']}")
+                else:
+                    print(f"❌ {result['error']}")
+                return result
+            else:
+                print("❌ 转换命令缺少参数 source 或 target")
+                return {"success": False, "error": "缺少 source 或 target 参数"}
+
         return {"success": False, "error": "未知的操作类型"}
 
     def run(self):
@@ -624,6 +672,7 @@ big_image.jpg
         print(f"🧠 使用模型: {self.model_name}")
         print("💡 输入 'exit' 或 'quit' 退出程序")
         print("🔄 支持切换目录和各种文件管理操作")
+        print("🎬 支持媒体文件格式转换（需提前安装ffmpeg并配置PATH）")
         print("=" * 80)
         
         while True:
