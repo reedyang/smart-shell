@@ -8,21 +8,30 @@ import shutil
 from datetime import datetime
 
 class FileManagerAgent:
-
-    def __init__(self, model_name: str = "gemma3:4b", work_directory: Optional[str] = None):
+    def __init__(self, model_name: str = "gemma3:4b", work_directory: Optional[str] = None, provider: str = "ollama", openai_conf: Optional[dict] = None, openwebui_conf: Optional[dict] = None, params: Optional[dict] = None):
         """
         初始化文件管理AI Agent
-        
         Args:
-            model_name: Ollama模型名称
-            work_directory: 工作目录，默认为当前目录
+            model_name: 模型名称
+            work_directory: 工作目录
+            provider: 模型服务提供方
+            openai_conf: openai参数
+            openwebui_conf: openwebui参数
+            params: 通用参数
         """
         self.model_name = model_name
         self.work_directory = Path(work_directory) if work_directory else Path.cwd()
         self.conversation_history = []
-        self.operation_results = []  # 存储操作结果
-        
-        # 验证模型是否可用
+        self.operation_results = []
+        self.provider = provider
+        self.openai_conf = openai_conf
+        self.openwebui_conf = openwebui_conf
+        self.params = params
+        # 兼容params统一配置
+        if self.provider == 'openai' and self.openai_conf is None and params is not None:
+            self.openai_conf = params
+        if self.provider == 'openwebui' and self.openwebui_conf is None and params is not None:
+            self.openwebui_conf = params
         self._validate_model()
         
         # 系统提示词
@@ -59,6 +68,8 @@ class FileManagerAgent:
 - 大小条件：{"action": "list", "params": {"smart_filter": "大于1MB的文件"}}
 - 复合条件：{"action": "list", "params": {"smart_filter": "最近一周修改的大文件"}}
 - 任何涉及文件属性比较、日期计算、大小判断的复杂条件
+- 涉及到多个关键词分别过滤不同文件的情况, 比如列举出所有视频文件这类需求，必须使用智能过滤
+- 输出结果需要避免重复项
 
 转换媒体文件格式：
 - {"action": "convert", "params": { "source": "源文件路径", "target": "目标文件路径", "options": "除了源文件和目标文件之外的其他ffmpeg命令参数, 不包括ffmpeg本身"}}
@@ -106,13 +117,163 @@ class FileManagerAgent:
                     print(f"💡 建议使用: {available_models[0]}")
         except Exception as e:
             print(f"⚠️ 无法验证模型: {e}")
-
-    def call_ollama(self, user_input: str, context: str = "") -> str:
-        """调用Ollama API获取AI回复"""
+    def _validate_model(self):
+        """验证模型是否可用（仅ollama模式）"""
+        if self.provider != "ollama":
+            return
         try:
-            # 检查模型名称是否有效
-            if not self.model_name or self.model_name.strip() == "":
-                return f"错误: 模型名称为空，请检查模型配置"
+            import ollama
+            models = ollama.list()
+            available_models = []
+            for model in models.get('models', []):
+                if hasattr(model, 'model'):
+                    available_models.append(model.model)
+                elif isinstance(model, dict):
+                    available_models.append(model.get('name', model.get('model', 'unknown')))
+                else:
+                    available_models.append(str(model))
+            if self.model_name not in available_models:
+                print(f"⚠️ 警告: 模型 '{self.model_name}' 不在可用模型列表中")
+                print(f"📋 可用模型: {available_models}")
+                if available_models:
+                    print(f"💡 建议使用: {available_models[0]}")
+        except Exception as e:
+            print(f"⚠️ 无法验证模型: {e}")
+
+    def call_ai(self, user_input: str, context: str = "", stream: bool = False):
+        """调用大模型API获取AI回复，支持流式输出。stream=True时返回生成器"""
+        try:
+            messages = [{"role": "system", "content": self.system_prompt}]
+            for msg in self.conversation_history[-5:]:
+                messages.append(msg)
+            current_input = f"当前工作目录: {self.work_directory}\n"
+            if self.operation_results:
+                current_input += f"最近的操作结果: {self.operation_results[-1]}\n"
+            if context:
+                current_input += f"操作上下文: {context}\n"
+            current_input += f"用户输入: {user_input}"
+            messages.append({"role": "user", "content": current_input})
+
+            if self.provider == "openai" and self.openai_conf:
+                import requests
+                import urllib3
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                api_key = self.openai_conf.get("api_key")
+                base_url = self.openai_conf.get("base_url", "https://api.openai.com/v1")
+                model = self.model_name
+                url = base_url.rstrip("/") + "/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": model,
+                    "messages": messages,
+                    "stream": stream
+                }
+                resp = requests.post(url, headers=headers, json=payload, verify=False, timeout=120, stream=stream)
+                resp.raise_for_status()
+                if stream:
+                    def gen():
+                        buffer = ""
+                        for line in resp.iter_lines():
+                            if not line or not line.startswith(b"data: "):
+                                continue
+                            data = line[6:]
+                            if data.strip() == b"[DONE]":
+                                break
+                            try:
+                                data_str = data.decode('utf-8', errors='replace')
+                                delta = json.loads(data_str)["choices"][0]["delta"].get("content", "")
+                                if delta:
+                                    buffer += delta
+                                    yield delta
+                            except Exception:
+                                continue
+                        self.conversation_history.append({"role": "user", "content": user_input})
+                        self.conversation_history.append({"role": "assistant", "content": buffer})
+                    return gen()
+                else:
+                    data = resp.json()
+                    ai_response = data["choices"][0]["message"]["content"]
+                    self.conversation_history.append({"role": "user", "content": user_input})
+                    self.conversation_history.append({"role": "assistant", "content": ai_response})
+                    return ai_response
+            elif self.provider == "openwebui" and self.openwebui_conf:
+                import requests
+                import urllib3
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                api_key = self.openwebui_conf.get("api_key")
+                base_url = self.openwebui_conf.get("base_url", "http://localhost:8080/v1")
+                model = self.model_name
+                url = base_url.rstrip("/") + "/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": model,
+                    "messages": messages,
+                    "stream": stream
+                }
+                resp = requests.post(url, headers=headers, json=payload, verify=False, timeout=120, stream=stream)
+                resp.raise_for_status()
+                if stream:
+                    def gen():
+                        buffer = ""
+                        for line in resp.iter_lines(decode_unicode=True):
+                            if not line or not line.startswith("data: "):
+                                continue
+                            data = line[6:]
+                            if data.strip() == "[DONE]":
+                                break
+                            try:
+                                delta = json.loads(data)["choices"][0]["delta"].get("content", "")
+                                if delta:
+                                    buffer += delta
+                                    yield delta
+                            except Exception:
+                                continue
+                        self.conversation_history.append({"role": "user", "content": user_input})
+                        self.conversation_history.append({"role": "assistant", "content": buffer})
+                    return gen()
+                else:
+                    data = resp.json()
+                    ai_response = data["choices"][0]["message"]["content"]
+                    self.conversation_history.append({"role": "user", "content": user_input})
+                    self.conversation_history.append({"role": "assistant", "content": ai_response})
+                    return ai_response
+            else:
+                import ollama
+                if stream:
+                    response = ollama.chat(
+                        model=self.model_name,
+                        messages=messages,
+                        stream=True
+                    )
+                    def gen():
+                        buffer = ""
+                        for chunk in response:
+                            delta = chunk.get("message", {}).get("content", "")
+                            if delta:
+                                buffer += delta
+                                yield delta
+                        self.conversation_history.append({"role": "user", "content": user_input})
+                        self.conversation_history.append({"role": "assistant", "content": buffer})
+                    return gen()
+                else:
+                    response = ollama.chat(
+                        model=self.model_name,
+                        messages=messages,
+                        stream=False
+                    )
+                    ai_response = response['message']['content']
+                    self.conversation_history.append({"role": "user", "content": user_input})
+                    self.conversation_history.append({"role": "assistant", "content": ai_response})
+                    return ai_response
+        except Exception as e:
+            error_msg = f"调用大模型API时出错: {str(e)} (provider: {self.provider}, model: {self.model_name})"
+            return error_msg
             
             # 构建对话历史
             messages = [{"role": "system", "content": self.system_prompt}]
@@ -276,7 +437,7 @@ big_image.jpg
 现在开始分析："""
             
             # 调用AI进行筛选
-            ai_response = self.call_ollama(ai_prompt)
+            ai_response = self.call_ai(ai_prompt)
             
             # 解析AI回复，提取符合条件的文件名
             if "无符合条件的文件" in ai_response:
@@ -689,25 +850,29 @@ big_image.jpg
                 
                 # 获取AI回复
                 print("🤖 AI正在思考...")
-                ai_response = self.call_ollama(user_input)
-                print(f"🤖 AI: {ai_response}")
-                
+                # 流式输出AI回复
+                stream_gen = self.call_ai(user_input, stream=True)
+                ai_response = ""
+                try:
+                    for chunk in stream_gen:
+                        print(chunk, end="", flush=True)
+                        ai_response += chunk
+                except Exception as e:
+                    print(f"\n❌ AI流式输出异常: {e}")
+                print()
                 # 提取并执行命令
                 command = self.extract_json_command(ai_response)
                 if command:
                     print("\n⚡ 执行操作...")
                     result = self.execute_command(command)
-                    
                     # 保存操作结果
                     self.operation_results.append({
                         "command": command,
                         "result": result,
                         "timestamp": datetime.now().isoformat()
                     })
-                    
                     # 简化后续建议逻辑，避免无限循环
                     if result.get("success") and result.get("total_files", 0) > 10:
-                        # 只在文件数量较多时提供简单建议
                         print(f"💡 提示: 发现 {result.get('total_files', 0)} 个文件，您可以使用 'cd' 切换目录或执行其他操作")
                 
             except KeyboardInterrupt:

@@ -1,4 +1,7 @@
 # 文件管理AI Agent使用说明
+#
+# 支持本地Ollama模型、OpenAI API、OpenWebUI API三种大模型接入方式。
+
 
 ## 概述
 这是一个基于本地Ollama大模型的AI文件管理助手，可以通过自然语言与用户交互，执行各种文件管理操作。
@@ -110,6 +113,68 @@ python file_manager_agent.py
 ```
 
 ## 配置选项
+
+### 使用外部大模型（OpenAI API 或 OpenWebUI API）
+
+你可以通过在用户主目录或源码根目录下新建 `llm-filemgr.json` 配置文件，指定大模型服务：
+
+```json
+{
+  "provider": "openai", // 可选值: ollama, openai, openwebui
+  "params": {
+    "api_key": "sk-xxx",
+    "base_url": "https://api.openai.com/v1",
+    "model": "gpt-3.5-turbo"
+  }
+}
+```
+
+> ⚠️ JSON标准不允许注释，实际文件请去掉注释行。
+
+配置说明：
+- `provider`：指定使用哪个大模型服务。`ollama`为本地模型，`openai`为OpenAI官方API，`openwebui`为OpenWebUI API。
+- `params`：填写对应API的key、base_url和模型名。
+- 若无此文件或provider为ollama，则默认使用本地ollama。
+
+#### 示例：使用OpenAI API
+```json
+{
+  "provider": "openai",
+  "params": {
+    "api_key": "sk-xxx",
+    "base_url": "https://api.openai.com/v1",
+    "model": "gpt-4o"
+  }
+}
+```
+
+#### 示例：使用OpenWebUI API
+```json
+{
+  "provider": "openwebui",
+  "params": {
+    "api_key": "your-key",
+    "base_url": "http://localhost:8080/v1",
+    "model": "your-model"
+  }
+}
+```
+#### 示例：使用局域网其它设备上部署的Ollama模型
+{
+  "provider": "openai",
+  "params": {
+    "api_key": "",
+    "base_url": "http://<ip address>:11434/v1",
+    "model": "gemma3:4b"
+  }
+}
+
+配置文件查找顺序：
+1. 用户主目录（如 `C:/Users/你的用户名/llm-filemgr.json`）
+2. 源码根目录
+3. 未找到则默认本地ollama
+
+如需切换回本地ollama，只需删除或重命名配置文件，或将provider设为`ollama`。
 
 ### 修改模型
 ```python
