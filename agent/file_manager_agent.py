@@ -45,6 +45,7 @@ class FileManagerAgent:
 6. 查看文件信息
 7. 切换工作目录
 8. 转换媒体文件格式
+9. 清空屏幕
 
 请按照以下格式回复：
 - 如果用户想执行文件操作，请在回复中包含JSON格式的操作指令
@@ -99,6 +100,9 @@ class FileManagerAgent:
 移动文件和文件夹:
 - {"action": "move", "params": {"source": "源文件或目录路径", "destination": "目标目录路径"}}
 - source支持通配符批量移动，如 "source": "*.txt" 会匹配所有txt文件, "source": "?.txt" 会匹配所有单字符命名的txt文件
+
+清空屏幕:
+- {"action": "cls", "params": {}}
 
 重要：
 - 不要"预测"或"编造"文件列表，系统会执行你的命令并显示实际结果
@@ -715,9 +719,14 @@ big_image.jpg
             return {"success": False, "error": f"总结文件失败: {str(e)}"}
     
     def execute_command(self, command: Dict) -> Dict[str, Any]:
-        """执行AI生成的命令，支持批量命令"""
+        """执行AI生成的命令，支持批量命令和cls命令"""
         action = command.get("action")
         params = command.get("params", {})
+
+        if action == "cls":
+            import os
+            os.system('cls' if os.name == 'nt' else 'clear')
+            return {"success": True, "message": "屏幕已清空"}
 
         if action == "batch":
             commands = params.get("commands", [])
@@ -905,6 +914,11 @@ big_image.jpg
                 if user_input.lower() in ['exit', 'quit', '退出']:
                     print("👋 再见！")
                     break
+                if user_input.lower() == 'cls':
+                    # 清空屏幕
+                    import os
+                    os.system('cls' if os.name == 'nt' else 'clear')
+                    continue
                 if not user_input:
                     continue
 
