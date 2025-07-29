@@ -71,11 +71,14 @@ class FileManagerAgent:
 - 涉及到多个关键词分别过滤不同文件的情况, 比如列举出所有视频文件这类需求，必须使用智能过滤
 - 输出结果需要避免重复项
 
+关键判断：如果过滤条件涉及时间、大小、日期比较或复杂逻辑，必须使用smart_filter！
+- 除了JSON指令外，还要给出自然语言的解释
+
 转换媒体文件格式：
 - {"action": "convert", "params": { "source": "源文件路径", "target": "目标文件路径", "options": "除了源文件和目标文件之外的其他ffmpeg命令参数, 不包括ffmpeg本身"}}
 
-关键判断：如果过滤条件涉及时间、大小、日期比较或复杂逻辑，必须使用smart_filter！
-- 除了JSON指令外，还要给出自然语言的解释
+总结文件内容:
+- {"action": "summarize", "params": {"path": "文件路径"}}
 
 重要：
 - 不要"预测"或"编造"文件列表，系统会执行你的命令并显示实际结果
@@ -678,6 +681,37 @@ big_image.jpg
         except Exception as e:
             return {"success": False, "error": f"ffmpeg 执行异常: {str(e)}"}
     
+    def summarize_file(self, file_path: str, max_lines: int = 50) -> dict:
+        """总结文本文件内容"""
+        try:
+            abs_path = Path(file_path)
+            if not abs_path.is_absolute():
+                abs_path = self.work_directory / file_path
+            if not abs_path.exists():
+                return {"success": False, "error": f"文件 '{file_path}' 不存在"}
+            if not abs_path.is_file():
+                return {"success": False, "error": f"'{file_path}' 不是一个文件"}
+            stat = abs_path.stat()
+            text_exts = ['.txt', '.md', '.json', '.py', '.csv', '.log', '.ini', '.yaml', '.yml']
+            if abs_path.suffix.lower() not in text_exts and stat.st_size > 1024*1024:
+                return {"success": False, "error": "仅支持文本文件或小于1MB的文件总结"}
+            try:
+                with open(abs_path, 'r', encoding='utf-8', errors='replace') as f:
+                    lines = []
+                    for i, line in enumerate(f):
+                        if i >= max_lines:
+                            lines.append('... (内容过长已截断)')
+                            break
+                        lines.append(line.rstrip('\n'))
+                    content = '\n'.join(lines)
+            except Exception as e:
+                return {"success": False, "error": f"无法读取文件内容: {str(e)}"}
+            prompt = f"请用中文简要总结以下文件内容（200字以内）：\n{content}"
+            summary = self.call_ai(prompt)
+            return {"success": True, "summary": summary, "file": str(abs_path)}
+        except Exception as e:
+            return {"success": False, "error": f"总结文件失败: {str(e)}"}
+    
     def execute_command(self, command: Dict) -> Dict[str, Any]:
         """执行AI生成的命令"""
         action = command.get("action")
@@ -823,6 +857,20 @@ big_image.jpg
             else:
                 print("❌ 转换命令缺少参数 source 或 target")
                 return {"success": False, "error": "缺少 source 或 target 参数"}
+
+        elif action == "summarize":
+            file_path = params.get("path")
+            if file_path:
+                result = self.summarize_file(file_path)
+                if result["success"]:
+                    print(f"\n📄 文件 {result['file']} 总结：")
+                    print(result["summary"])
+                else:
+                    print(f"❌ {result['error']}")
+                return result
+            else:
+                print("❌ summarize命令缺少path参数")
+                return {"success": False, "error": "缺少path参数"}
 
         return {"success": False, "error": "未知的操作类型"}
 
