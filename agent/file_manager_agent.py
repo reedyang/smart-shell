@@ -46,18 +46,30 @@ class FileManagerAgent:
 7. 切换工作目录
 8. 转换媒体文件格式
 9. 清空屏幕
+10. 直接调用系统命令（shell）
+11. 创建脚本文件
 
 请按照以下格式回复：
-- 如果用户想执行文件操作，请在回复中包含JSON格式的操作指令
-- JSON格式：{"action": "操作类型", "params": {"参数名": "参数值"}}
-- 支持的操作类型：list, rename, move, delete, mkdir, info, cd, batch
+- 如果用户想执行文件操作，请在回复中包含JSON格式的操作指令, 以"```json"开始，以"```"结束，指令主体部分放在同一行。示例如下：
+```json
+{"action": "list", "params": {}, "last_action": true}
+```
+- JSON格式：{"action": "操作类型", "params": {"参数名": "参数值"}, "last_action": true}
+- 一次回复如果包含多条json操作指令，只有第一条会被执行，后续的指令会被忽略。如果需要执行多个操作，请使用batch命令, 把多个子命令包含在内形成一条json指令。
+- 每条指令（包括batch命令）都需要设置"last_action"属性，但是batch命令的子命令不要包含"last_action"。如果你只需要执行这条指令就可以完成用户的当前需求，不管用户是否可能还有其它需求，那么你需要明确指定"last_action": true, 例如：{"action": "cls", "last_action": true, "params": {}}, 否则，设置"last_action": false. 如果你不按这个要求设置last_action，这个月的工资会被扣完。
+- 如果指令设置了"last_action": true, 那么表示这是最后一条指令，执行成功后结果不会返回给你；如果设置了"last_action": false, 那么指令执行的结果会返回给你，根据你的分析继续执行下一步操作。
+- 如果用户的指令需要分多步完成，一次只执行一步动作，等待动作返回的结果再进行下一步，直到完成所有步骤。完成所有步骤后输出'{"action": "done"}'
+- 当你收到操作结果时，请根据结果分析情况并提供进一步的建议或操作。如果命令执行结果里显示用户取消或放弃了某个操作，那么你需要中止执行后续操作，直接输出{"action": "done"}表示操作完成。
+- 必要时可以创建脚本完成任务，执行完自己创建的临时脚本文件后，需要删除它，避免留下垃圾文件
+
+支持的操作类型：list, rename, move, delete, mkdir, info, cd, convert, cls, batch, shell, script
 
 批量命令格式：
 - {"action": "batch", "params": {"commands": [命令1, 命令2, ...]}}
   例如：
   {"action": "batch", "params": {"commands": [
     {"action": "move", "params": {"source": "a.txt", "destination": "bak/"}},
-    {"action": "delete", "params": {"path": "b.txt", "confirmed": true}}
+    {"action": "delete", "params": {"path": "b.txt"}}
   ]}}
 批量命令会顺序执行所有子命令，并将所有结果一并返回。
 批量结果格式：
@@ -89,9 +101,13 @@ class FileManagerAgent:
 关键判断：如果过滤条件涉及时间、大小、日期比较或复杂逻辑，必须使用smart_filter！
 - 除了JSON指令外，还要给出自然语言的解释
 
+删除文件和文件夹
+- {"action": "delete", "params": {"path": "文件或目录路径"}}
+- 支持通配符批量删除，如 "path": "*.txt" 会匹配所有txt文件, "path": "?.txt" 会匹配所有单字符命名的txt文件
+
 转换媒体文件格式：
 - {"action": "convert", "params": { "source": "源文件路径", "target": "目标文件路径", "options": "除了源文件和目标文件之外的其他ffmpeg命令参数, 不包括ffmpeg本身"}}
-- 不支持通配符指定文件名来批量转换
+- 必须指定明确的原文件名和目标文件名，不支持通配符指定文件名来批量转换
 - target只能是文件，不能是目录
 
 总结文件内容:
@@ -104,23 +120,24 @@ class FileManagerAgent:
 清空屏幕:
 - {"action": "cls", "params": {}}
 
+
+创建脚本文件:
+- {"action": "script", "params": {"filename": "脚本文件名（如 test.py 或 run.sh）", "content": "脚本内容字符串"}}
+- 例如: {"action": "script", "params": {"filename": "hello.py", "content": "print('hello')"}}
+
+直接调用系统命令:
+- {"action": "shell", "params": {"command": "系统命令字符串"}}
+- 例如: {"action": "shell", "params": {"command": "dir"}}
+
 重要：
 - 不要"预测"或"编造"文件列表，系统会执行你的命令并显示实际结果
 - 当执行列表命令时，只提供JSON指令和说明，不要列出具体的文件名
 - 等待系统执行命令后，你会收到实际的操作结果用于后续建议
-- 删除操作需要确认：使用 {"action": "delete", "params": {"path": "文件名", "confirmed": true}}
-- 当用户说"删除并确认"或"强制删除"时，设置 "confirmed": true
 - 只把包含通配符"*"的用户输入字串当作过滤条件，否则可以考虑作为目录名，文件名或者其它信息
 - 如果用户需要转换媒体文件格式，使用convert命令
 - 如果用户需要批量执行多个命令，并且执行这些命令的前提都已具备，使用batch命令
 
-严格服从:
-- 如果用户的指令需要分多步完成，一次只执行一步动作，等待动作返回的结果再进行下一步，直到完成所有步骤。完成所有步骤后输出'{"action": "done"}'
-
-当你收到操作结果时，请根据结果分析情况并提供进一步的建议或操作。
-
 安全原则：
-- 删除操作需要用户确认
 - 不要操作系统重要文件
 - 重命名时检查目标文件是否已存在
 - 切换目录前验证目录是否存在
@@ -174,7 +191,8 @@ class FileManagerAgent:
     def call_ai(self, user_input: str, context: str = "", stream: bool = False):
         """调用大模型API获取AI回复，支持流式输出。stream=True时返回生成器"""
         try:
-            messages = [{"role": "system", "content": self.system_prompt}]
+            os_info = os.uname() if hasattr(os, 'uname') else "无法获取操作系统信息"
+            messages = [{"role": "system", "content": self.system_prompt + "\n当前操作系统信息：{os_info}"}]
             for msg in self.conversation_history[-5:]:
                 messages.append(msg)
             current_input = f"当前工作目录: {self.work_directory}\n"
@@ -342,7 +360,7 @@ class FileManagerAgent:
             print(f"⚠️ JSON提取错误: {e}")
             return None
 
-    def list_directory(self, path: Optional[str] = None, file_filter: Optional[str] = None) -> Dict[str, Any]:
+    def action_list_directory(self, path: Optional[str] = None, file_filter: Optional[str] = None) -> Dict[str, Any]:
         """列出目录内容"""
         target_path = Path(path) if path else self.work_directory
         
@@ -390,7 +408,7 @@ class FileManagerAgent:
             "filter_info": filter_info
         }
 
-    def intelligent_filter(self, file_list_result: Dict[str, Any], filter_condition: str) -> Dict[str, Any]:
+    def action_intelligent_filter(self, file_list_result: Dict[str, Any], filter_condition: str) -> Dict[str, Any]:
         """使用AI智能过滤文件列表"""
         try:
             # 构建文件信息文本
@@ -479,7 +497,7 @@ big_image.jpg
                 "original_result": file_list_result
             }
 
-    def change_directory(self, path: str) -> Dict[str, Any]:
+    def action_change_directory(self, path: str) -> Dict[str, Any]:
         """切换工作目录"""
         try:
             if path == "..":
@@ -515,7 +533,7 @@ big_image.jpg
         except Exception as e:
             return {"success": False, "error": f"切换目录失败: {str(e)}"}
 
-    def rename_file(self, old_name: str, new_name: str) -> Dict[str, Any]:
+    def action_rename_file(self, old_name: str, new_name: str) -> Dict[str, Any]:
         """重命名文件或文件夹"""
         try:
             old_path = self.work_directory / old_name
@@ -538,7 +556,7 @@ big_image.jpg
         except Exception as e:
             return {"success": False, "error": f"重命名失败: {str(e)}"}
 
-    def move_file(self, source: str, destination: str) -> Dict[str, Any]:
+    def action_move_file(self, source: str, destination: str) -> Dict[str, Any]:
         """移动文件或文件夹，支持通配符批量移动"""
         import glob
         try:
@@ -583,21 +601,53 @@ big_image.jpg
         except Exception as e:
             return {"success": False, "error": f"移动失败: {str(e)}"}
 
-    def delete_file(self, file_name: str, confirmed: bool = False) -> Dict[str, Any]:
-        """删除文件或文件夹"""
+    def action_delete_file(self, file_name: str, confirmed: bool = False) -> Dict[str, Any]:
+        """删除文件或文件夹，支持通配符批量删除"""
+        import glob
+        # 判断是否为通配符批量删除
+        if '*' in file_name or '?' in file_name:
+            pattern = str((self.work_directory / file_name).resolve())
+            matched_files = [Path(p) for p in glob.glob(pattern)]
+            if not matched_files:
+                return {"success": False, "error": f"未找到匹配的文件: {file_name}"}
+            if not confirmed:
+                confirmation = input(f"您确定要批量删除 {len(matched_files)} 个文件/目录吗？(y/n): ")
+                if confirmation.lower() != 'y':
+                    return {
+                        "success": False,
+                        "warning": f"用户拒绝批量删除 '{file_name}', 请跳过这些文件/目录",
+                        "confirmation_needed": False
+                    }
+            results = []
+            for file_path in matched_files:
+                try:
+                    if not file_path.exists():
+                        results.append({"file": str(file_path), "success": False, "error": "不存在"})
+                        continue
+                    if file_path.is_dir():
+                        shutil.rmtree(file_path)
+                        results.append({"file": str(file_path), "success": True, "type": "directory", "message": f"成功删除目录 '{file_path.name}'"})
+                    else:
+                        file_path.unlink()
+                        results.append({"file": str(file_path), "success": True, "type": "file", "message": f"成功删除文件 '{file_path.name}'"})
+                except Exception as e:
+                    results.append({"file": str(file_path), "success": False, "error": f"删除失败: {str(e)}"})
+            all_success = all(r.get("success", False) for r in results)
+            return {"success": all_success, "deleted": results, "count": len(results)}
+
+        # 单文件/目录删除
         if not confirmed:
-            return {
-                "success": False,
-                "warning": f"即将删除 '{file_name}'，请确认是否继续",
-                "confirmation_needed": True
-            }
-        
+            confirmation = input(f"您确定要删除 '{file_name}' 吗？(y/n): ")
+            if confirmation.lower() != 'y':
+                return {
+                    "success": False,
+                    "warning": f"用户拒绝删除 '{file_name}'，请跳过这个文件/目录",
+                    "confirmation_needed": False
+                }
         try:
             file_path = self.work_directory / file_name
-            
             if not file_path.exists():
                 return {"success": False, "error": f"文件 '{file_name}' 不存在"}
-            
             if file_path.is_dir():
                 shutil.rmtree(file_path)
                 return {
@@ -614,11 +664,10 @@ big_image.jpg
                     "type": "file",
                     "message": f"成功删除文件 '{file_name}'"
                 }
-            
         except Exception as e:
             return {"success": False, "error": f"删除失败: {str(e)}"}
 
-    def create_directory(self, dir_name: str) -> Dict[str, Any]:
+    def action_create_directory(self, dir_name: str) -> Dict[str, Any]:
         """创建新文件夹"""
         try:
             dir_path = self.work_directory / dir_name
@@ -637,7 +686,7 @@ big_image.jpg
         except Exception as e:
             return {"success": False, "error": f"创建文件夹失败: {str(e)}"}
 
-    def get_file_info(self, file_name: str) -> Dict[str, Any]:
+    def action_get_file_info(self, file_name: str) -> Dict[str, Any]:
         """获取文件信息"""
         try:
             file_path = self.work_directory / file_name
@@ -660,15 +709,17 @@ big_image.jpg
         except Exception as e:
             return {"success": False, "error": f"获取文件信息失败: {str(e)}"}
 
-    def convert_media(self, source: str, target: str, options: Optional[str] = None) -> Dict[str, Any]:
+    def action_convert_media(self, source: str, target: str, options: Optional[str] = None) -> Dict[str, Any]:
         """调用ffmpeg转换媒体文件格式"""
         import subprocess
         if not source or not target:
+            print("⚠️ 缺少 source 或 target 参数")
             return {"success": False, "error": "缺少 source 或 target 参数"}
         
         # 检查源文件是否存在
         source_path = self.work_directory / source
         if not source_path.exists():
+            print(f"⚠️ 源文件 '{source}' 不存在")
             return {"success": False, "error": f"源文件 '{source}' 不存在"}
 
         ffmpeg_cmd = ["ffmpeg", "-y", "-i", source]
@@ -677,7 +728,13 @@ big_image.jpg
         ffmpeg_cmd.append(target)
         print(f"🔄 正在执行 ffmpeg 命令: {' '.join(ffmpeg_cmd)}")
         try:
-            result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+            result = subprocess.run(
+                ffmpeg_cmd,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace"
+            )
             if result.returncode == 0:
                 return {"success": True, "message": "媒体文件转换成功"}
             else:
@@ -687,7 +744,7 @@ big_image.jpg
         except Exception as e:
             return {"success": False, "error": f"ffmpeg 执行异常: {str(e)}"}
     
-    def summarize_file(self, file_path: str, max_lines: int = 50) -> dict:
+    def action_summarize_file(self, file_path: str, max_lines: int = 50) -> dict:
         """总结文本文件内容"""
         try:
             abs_path = Path(file_path)
@@ -718,8 +775,60 @@ big_image.jpg
         except Exception as e:
             return {"success": False, "error": f"总结文件失败: {str(e)}"}
     
+    def action_shell_command(self, command: str) -> dict:
+        """执行任意系统命令，返回输出和错误信息"""
+        # 请求用户确实是否执行这条命令
+        if not command.strip():
+            return {"success": False, "error": "命令不能为空"}
+        confirm = input(f"⚠️ 确认执行系统命令: {command} ? (y/n): ")
+        if confirm.lower() != "y":
+            return {"success": False, "error": "用户取消了操作"}
+
+        import subprocess
+        try:
+            # Windows下建议用shell=True，Linux下shell=False更安全
+            result = subprocess.run(command, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=str(self.work_directory))
+            return {
+                "success": result.returncode == 0,
+                "stdout": result.stdout.strip(),
+                "stderr": result.stderr.strip(),
+                "returncode": result.returncode
+            }
+        except Exception as e:
+            return {"success": False, "error": f"系统命令执行异常: {str(e)}"}
+        
+    def action_create_script(self, filename: str, content: str) -> dict:
+        """创建脚本文件，支持任意内容和扩展名"""
+        # 请求用户确认是否创建脚本文件
+        print("请求创建脚本文件: {filename}")
+        print(f"内容:\n{content}")
+        confirm = input(f"⚠️ 确认创建脚本文件: {filename} ? (y/n): ")
+        if confirm.lower() != "y":
+            return {"success": False, "error": "用户取消了操作"}
+
+        try:
+            if not filename or not content:
+                return {"success": False, "error": "缺少文件名或内容"}
+            # 只允许创建在当前工作目录下
+            script_path = self.work_directory / filename
+            if script_path.exists():
+                return {"success": False, "error": f"文件 '{filename}' 已存在"}
+            with open(script_path, 'w', encoding='utf-8', errors='replace') as f:
+                f.write(content)
+            # 可选：为 .sh/.bat/.ps1/.py 等脚本加可执行权限（仅Linux/Mac）
+            import stat
+            if script_path.suffix in ['.sh', '.py', '.pl', '.rb'] and hasattr(os, 'chmod'):
+                try:
+                    os.chmod(script_path, os.stat(script_path).st_mode | stat.S_IXUSR)
+                except Exception:
+                    pass
+            return {"success": True, "filename": filename, "full_path": str(script_path), "message": f"成功创建脚本文件 '{filename}'"}
+        except Exception as e:
+            return {"success": False, "error": f"创建脚本文件失败: {str(e)}"}
+
     def execute_command(self, command: Dict) -> Dict[str, Any]:
         """执行AI生成的命令，支持批量命令和cls命令"""
+        print(f"🔍 正在执行命令: {command}")
         action = command.get("action")
         params = command.get("params", {})
 
@@ -736,7 +845,7 @@ big_image.jpg
                 sub_action = subcmd.get("action")
                 sub_result = self.execute_command(subcmd)
                 results.append({"action": sub_action, "result": sub_result})
-                if not sub_result.get("success", False):
+                if not sub_result.get("success", True):
                     all_success = False
             return {"success": all_success, "results": results}
 
@@ -746,13 +855,13 @@ big_image.jpg
             smart_filter = params.get("smart_filter")  # 智能过滤条件
 
             # 首先获取所有文件
-            result = self.list_directory(path, file_filter)
+            result = self.action_list_directory(path, file_filter)
 
             if result["success"]:
                 # 如果有智能过滤条件，使用AI进行筛选
                 if smart_filter:
                     print(f"🧠 正在使用AI智能过滤: {smart_filter}")
-                    filtered_result = self.intelligent_filter(result, smart_filter)
+                    filtered_result = self.action_intelligent_filter(result, smart_filter)
                     if filtered_result["success"]:
                         result = filtered_result
 
@@ -776,7 +885,7 @@ big_image.jpg
 
         elif action == "cd":
             path = params.get("path", "")
-            result = self.change_directory(path)
+            result = self.action_change_directory(path)
 
             if result["success"]:
                 print(f"✅ {result['message']}")
@@ -789,7 +898,7 @@ big_image.jpg
             old_name = params.get("old_name")
             new_name = params.get("new_name")
             if old_name and new_name:
-                result = self.rename_file(old_name, new_name)
+                result = self.action_rename_file(old_name, new_name)
 
                 if result["success"]:
                     print(f"✅ {result['message']}")
@@ -802,7 +911,7 @@ big_image.jpg
             source = params.get("source")
             destination = params.get("destination")
             if source and destination:
-                result = self.move_file(source, destination)
+                result = self.action_move_file(source, destination)
 
                 if result["success"]:
                     print(f"✅ {result['message']}")
@@ -814,17 +923,14 @@ big_image.jpg
         elif action == "delete":
             # 支持多种参数名: file_name, path, name
             file_name = params.get("file_name") or params.get("path") or params.get("name")
-            confirmed = params.get("confirmed", False)
             if file_name:
-                result = self.delete_file(file_name, confirmed)
+                result = self.action_delete_file(file_name, False)
 
                 if result["success"]:
                     print(f"✅ {result['message']}")
                 elif result.get("confirmation_needed"):
                     print(f"⚠️ {result['warning']}")
                     print(f"💡 如需确认删除，请使用：删除{file_name}并确认")
-                else:
-                    print(f"❌ {result['error']}")
 
                 return result
             else:
@@ -834,7 +940,7 @@ big_image.jpg
         elif action == "mkdir":
             path = params.get("path")
             if path:
-                result = self.create_directory(path)
+                result = self.action_create_directory(path)
 
                 if result["success"]:
                     print(f"✅ {result['message']}")
@@ -847,7 +953,7 @@ big_image.jpg
             # 支持多种参数名: file_name, path, name
             file_name = params.get("file_name") or params.get("path") or params.get("name")
             if file_name:
-                result = self.get_file_info(file_name)
+                result = self.action_get_file_info(file_name)
 
                 if result["success"]:
                     print(f"\n📋 文件信息：")
@@ -871,7 +977,7 @@ big_image.jpg
             target = params.get("target")
             options = params.get("options")
             if source and target:
-                result = self.convert_media(source, target, options)
+                result = self.action_convert_media(source, target, options)
                 if result["success"]:
                     print(f"✅ {result['message']}")
                 else:
@@ -884,7 +990,7 @@ big_image.jpg
         elif action == "summarize":
             file_path = params.get("path")
             if file_path:
-                result = self.summarize_file(file_path)
+                result = self.action_summarize_file(file_path)
                 if result["success"]:
                     print(f"\n📄 文件 {result['file']} 总结：")
                     print(result["summary"])
@@ -894,6 +1000,33 @@ big_image.jpg
             else:
                 print("❌ summarize命令缺少path参数")
                 return {"success": False, "error": "缺少path参数"}
+
+        elif action == "shell":
+            shell_cmd = params.get("command")
+            if shell_cmd:
+                result = self.action_shell_command(shell_cmd)
+                if result["success"]:
+                    print(f"\n💻 系统命令输出:\n{result['stdout']}")
+                else:
+                    print(f"❌ 系统命令执行失败: {result.get('stderr', result.get('error', '未知错误'))}")
+                return result
+            else:
+                print("❌ shell命令缺少command参数")
+                return {"success": False, "error": "缺少command参数"}
+
+        elif action == "script":
+            filename = params.get("filename")
+            content = params.get("content")
+            if filename and content:
+                result = self.action_create_script(filename, content)
+                if result["success"]:
+                    print(f"✅ {result['message']}")
+                else:
+                    print(f"❌ {result['error']}")
+                return result
+            else:
+                print("❌ script命令缺少filename或content参数")
+                return {"success": False, "error": "缺少filename或content参数"}
 
         return {"success": False, "error": "未知的操作类型"}
 
@@ -912,9 +1045,8 @@ big_image.jpg
                 # 显示完整路径
                 user_input = input(f"\n👤 您 [{str(self.work_directory)}]: ").strip()
                 if user_input.lower() in ['exit', 'quit', '退出']:
-                    print("👋 再见！")
                     break
-                if user_input.lower() == 'cls':
+                if user_input.lower() == 'cls' or user_input.lower() == 'clear' or user_input.lower() == '清空屏幕':
                     # 清空屏幕
                     import os
                     os.system('cls' if os.name == 'nt' else 'clear')
@@ -956,6 +1088,11 @@ big_image.jpg
                     last_result = result
                     # 若AI未自动输出done，则继续将本次结果传给AI生成下一个命令
                     next_input = "命令执行结果：" + json.dumps(result, ensure_ascii=False)
+
+                    if result.get("success", True) and command.get("last_action") == True:
+                        print("✅ 操作已完成")
+                        break
+
             except KeyboardInterrupt:
                 print("\n👋 程序已中断，再见！")
                 break

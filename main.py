@@ -3,8 +3,8 @@
 文件管理AI Agent主启动脚本
 
 用法：
-    python run_agent.py       # 使用默认AI模型
-    python run_agent.py model # 使用指定的AI模型
+    python main.py       # 使用默认AI模型
+    python main.py model # 使用指定的AI模型
 """
 
 import sys

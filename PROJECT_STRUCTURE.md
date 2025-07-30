@@ -7,30 +7,15 @@ ds/
 │   ├── __init__.py                # 包初始化文件
 │   ├── file_manager_agent.py      # 主要的AI Agent实现
 │   ├── demo_file_manager.py       # 功能演示脚本
-│   ├── test_new_features.py       # 新功能测试脚本
-│   └── README_file_manager.md     # 详细使用说明
-├── run_agent.py                   # 主启动脚本
-├── run_demo.py                    # 演示启动脚本
-└── deepseek_python.py            # DeepSeek Python示例
+└── main.py                        # 主启动脚本
 ```
 
 ## 使用方法
 
 ### 1. 运行AI Agent
 ```bash
-python run_agent.py       # 使用默认AI模型
-python run_agent.py model # 使用指定的AI模型
-```
-
-### 2. 运行演示
-```bash
-python run_demo.py
-```
-
-### 3. 运行测试
-```bash
-cd agent
-python test_new_features.py
+python main.py       # 使用默认AI模型
+python main.py model # 使用指定的AI模型
 ```
 
 ## 新功能特性
