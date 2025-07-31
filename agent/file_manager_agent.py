@@ -193,8 +193,10 @@ class FileManagerAgent:
     def call_ai(self, user_input: str, context: str = "", stream: bool = False):
         """调用大模型API获取AI回复，支持流式输出。stream=True时返回生成器"""
         try:
-            os_info = os.uname() if hasattr(os, 'uname') else "无法获取操作系统信息"
-            messages = [{"role": "system", "content": self.system_prompt + "\n当前操作系统信息：{os_info}"}]
+            # 确保os未被局部变量遮蔽
+            import os
+            os_info = os.uname() if hasattr(os, 'uname') else os.name
+            messages = [{"role": "system", "content": self.system_prompt + f"\n当前操作系统信息：{os_info}"}]
             for msg in self.conversation_history[-5:]:
                 messages.append(msg)
             current_input = f"当前工作目录: {self.work_directory}\n"
@@ -1042,18 +1044,66 @@ big_image.jpg
         print("🎬 支持媒体文件处理（需提前安装ffmpeg并配置PATH）")
         print("=" * 80)
 
+        import os
+        os_name = os.name
+
+        import subprocess
+        import re
+        system_cmd_patterns = [
+            r'^cd(\s+.+)?$',
+            r'^(dir|ls|list)(\s+.+)?$',
+            r'^(del|delete|rm)(\s+.+)?$',
+            r'^(ping)(\s+.+)?$',
+            r'^(ipconfig|ifconfig)(\s+.+)?$',
+            r'^(type|cat)(\s+.+)?$',
+            r'^(echo)(\s+.+)?$',
+            r'^(whoami|hostname|date|time)(\s+.+)?$',
+            r'^(wmic|net)(\s+.+)?$',
+        ]
+        system_cmd_re = re.compile('|'.join(system_cmd_patterns), re.IGNORECASE)
+
         while True:
             try:
                 # 显示完整路径
-                user_input = input(f"\n👤 您 [{str(self.work_directory)}]: ").strip()
+                user_input = input(f"\n👤 [{str(self.work_directory)}]: ").strip()
                 if user_input.lower() in ['exit', 'quit', '退出']:
                     break
                 if user_input.lower() == 'cls' or user_input.lower() == 'clear' or user_input.lower() == '清空屏幕':
                     # 清空屏幕
                     import os
-                    os.system('cls' if os.name == 'nt' else 'clear')
+                    os.system('cls' if os_name == 'nt' else 'clear')
                     continue
                 if not user_input:
+                    continue
+
+                # 判断是否为常见系统命令
+                if system_cmd_re.match(user_input):
+                    if user_input.lower().startswith('ls') and os_name == 'nt':
+                        user_input = 'dir ' + user_input[2:].strip()
+                    elif user_input.lower().startswith('list') and os_name == 'nt':
+                        user_input = 'dir ' + user_input[4:].strip()
+                    elif user_input.lower().startswith('dir') and os_name != 'nt':
+                        user_input = 'ls ' + user_input[3:].strip()
+
+                    # 直接执行系统命令
+                    try:
+                        # Windows下cd命令特殊处理
+                        if user_input.lower().startswith('cd '):
+                            path = user_input[3:].strip()
+                            result = self.action_change_directory(path)
+                            if result["success"]:
+                                print(f"✅ {result['message']}")
+                            else:
+                                print(f"❌ {result['error']}")
+                        else:
+                            # 其它命令直接用subprocess
+                            completed = subprocess.run(user_input, shell=True, capture_output=True, text=True, encoding='utf-8', errors='replace', cwd=str(self.work_directory))
+                            if completed.stdout:
+                                print(completed.stdout)
+                            if completed.stderr:
+                                print(completed.stderr)
+                    except Exception as e:
+                        print(f"❌ 系统命令执行异常: {e}")
                     continue
 
                 last_result = None
