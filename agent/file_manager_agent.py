@@ -702,6 +702,42 @@ big_image.jpg
         except Exception as e:
             return {"success": False, "error": f"创建脚本文件失败: {str(e)}"}
 
+    def action_read_file(self, file_path: str, max_lines: int = 100) -> dict:
+        """读取文本文件内容，返回前max_lines行，支持自动编码检测，适合预览文本文件。"""
+        try:
+            abs_path = Path(file_path)
+            if not abs_path.is_absolute():
+                abs_path = self.work_directory / file_path
+            if not abs_path.exists():
+                return {"success": False, "error": f"文件 '{file_path}' 不存在"}
+            if not abs_path.is_file():
+                return {"success": False, "error": f"'{file_path}' 不是一个文件"}
+            stat = abs_path.stat()
+            text_exts = ['.txt', '.md', '.json', '.py', '.csv', '.log', '.ini', '.yaml', '.yml']
+            if abs_path.suffix.lower() not in text_exts and stat.st_size > 1024*1024:
+                return {"success": False, "error": "仅支持文本文件或小于1MB的文件读取"}
+            # 自动尝试多种编码
+            encodings = ['utf-8', 'gbk', 'gb2312', 'utf-16', 'latin1']
+            content = None
+            for enc in encodings:
+                try:
+                    with open(abs_path, 'r', encoding=enc, errors='replace') as f:
+                        lines = []
+                        for i, line in enumerate(f):
+                            if i >= max_lines:
+                                lines.append('... (内容过长已截断)')
+                                break
+                            lines.append(line.rstrip('\n'))
+                        content = '\n'.join(lines)
+                    break
+                except Exception:
+                    continue
+            if content is None:
+                return {"success": False, "error": "无法读取文件内容，可能编码不受支持"}
+            return {"success": True, "file": str(abs_path), "content": content}
+        except Exception as e:
+            return {"success": False, "error": f"读取文件失败: {str(e)}"}
+
     def execute_command(self, command: Dict) -> Dict[str, Any]:
         """执行AI生成的命令，支持批量命令和cls命令"""
         print(f"🔍 正在执行命令: {command}")
@@ -713,7 +749,7 @@ big_image.jpg
             os.system('cls' if os.name == 'nt' else 'clear')
             return {"success": True, "message": "屏幕已清空"}
 
-        if action == "batch":
+        elif action == "batch":
             commands = params.get("commands", [])
             results = []
             all_success = True
@@ -725,7 +761,7 @@ big_image.jpg
                     all_success = False
             return {"success": all_success, "results": results}
 
-        if action == "list":
+        elif action == "list":
             path = params.get("path")
             file_filter = params.get("filter")
             smart_filter = params.get("smart_filter")  # 智能过滤条件
@@ -903,6 +939,20 @@ big_image.jpg
             else:
                 print("❌ script命令缺少filename或content参数")
                 return {"success": False, "error": "缺少filename或content参数"}
+        
+        elif action == "read":
+            file_path = params.get("path")
+            max_lines = params.get("max_lines", 100)
+            if file_path:
+                result = self.action_read_file(file_path, max_lines)
+                if result["success"]:
+                    print(f"\n📄 文件 {result['file']} 内容预览：")
+                else:
+                    print(f"❌ {result['error']}")
+                return result
+            else:
+                print("❌ read命令缺少path参数")
+                return {"success": False, "error": "缺少path参数"}
 
         return {"success": False, "error": "未知的操作类型"}
 

@@ -10,6 +10,7 @@
 9. 清空屏幕
 10. 直接调用系统命令（shell）
 11. 创建脚本文件
+12. 读取文本文件
 
 请按照以下格式回复：
 - 如果用户想执行文件操作，请在回复中包含JSON格式的操作指令, 以"```json"开始，以"```"结束，指令主体部分放在同一行。示例如下：
@@ -26,7 +27,7 @@
 - 涉及到需要使用ffmpeg命令来处理单个文件的需求，一定要用媒体文件处理命令来完成，不要直接调用ffmpeg命令，也不要创建脚本来调用ffmpeg命令
 - 必要时可以创建脚本完成任务，执行完自己创建的临时脚本文件后，需要删除它，避免留下垃圾文件
 
-支持的操作类型：list, rename, move, delete, mkdir, info, cd, ffmpeg, cls, batch, shell, script
+支持的操作类型：list, rename, move, delete, mkdir, info, cd, ffmpeg, cls, batch, shell, script, read
 
 批量命令格式：
 - {"action": "batch", "params": {"commands": [命令1, 命令2, ...]}}
@@ -92,6 +93,9 @@
 直接调用系统命令:
 - {"action": "shell", "params": {"command": "系统命令字符串"}}
 - 例如: {"action": "shell", "params": {"command": "dir"}}
+
+读取文本文件:
+- {"action": "read", "params": {"path": "文件路径", "max_lines": 最大读取行数}}
 
 重要：
 - 不要"预测"或"编造"文件列表，系统会执行你的命令并显示实际结果
