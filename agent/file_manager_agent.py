@@ -58,11 +58,11 @@ class FileManagerAgent:
 - 一次回复如果包含多条json操作指令，只有第一条会被执行，后续的指令会被忽略。如果需要执行多个操作，请使用batch命令, 把多个子命令包含在内形成一条json指令。
 - 每条指令（包括batch命令）都需要设置"last_action"属性，但是batch命令的子命令不要包含"last_action"。如果你只需要执行这条指令就可以完成用户的当前需求，不管用户是否可能还有其它需求，那么你需要明确指定"last_action": true, 例如：{"action": "cls", "last_action": true, "params": {}}, 否则，设置"last_action": false. 如果你不按这个要求设置last_action，这个月的工资会被扣完。
 - 如果指令设置了"last_action": true, 那么表示这是最后一条指令，执行成功后结果不会返回给你；如果设置了"last_action": false, 那么指令执行的结果会返回给你，根据你的分析继续执行下一步操作。
-- 如果用户的指令需要分多步完成，一次只执行一步动作，等待动作返回的结果再进行下一步，直到完成所有步骤。完成所有步骤后输出'{"action": "done"}'
+- 如果用户的指令需要分多步完成，只回复第一步动作，等待动作返回的结果再回复下一步动作，直到完成所有步骤。完成所有步骤后输出'{"action": "done"}'
 - 当你收到操作结果时，请根据结果分析情况并提供进一步的建议或操作。如果命令执行结果里显示用户取消或放弃了某个操作，那么你需要中止执行后续操作，直接输出{"action": "done"}表示操作完成。
+- 如果用户需求可以通过内置的命令完成，那么请直接使用内置命令，即使需要更多步骤也应该优先使用内置命令，次优先调用外部命令，然后才考虑创建脚本
+- 涉及到需要使用ffmpeg命令来处理单个文件的需求，一定要用媒体文件处理命令来完成，不要直接调用ffmpeg命令，也不要创建脚本来调用ffmpeg命令
 - 必要时可以创建脚本完成任务，执行完自己创建的临时脚本文件后，需要删除它，避免留下垃圾文件
-- 如果用户需求可以通过内置的命令完成，那么请直接使用内置命令，即使需要分步完成也可以，不要调用外部命令，也不要创建脚本
-- 涉及到需要使用ffmpeg命令来处理单个文件的需求，一定要用媒体文件处理命令来完成，不要直接调用ffmpeg命令，也不要创建脚本来调用ffmpeg命令, 违反这个规则将会受到严厉的惩罚
 
 支持的操作类型：list, rename, move, delete, mkdir, info, cd, ffmpeg, cls, batch, shell, script
 
@@ -1089,7 +1089,7 @@ big_image.jpg
                     })
                     last_result = result
                     # 若AI未自动输出done，则继续将本次结果传给AI生成下一个命令
-                    next_input = "命令执行结果：" + json.dumps(result, ensure_ascii=False)
+                    next_input = "命令执行结果：" + json.dumps(self.operation_results[-1], ensure_ascii=False)
 
                     if result.get("success", True) and command.get("last_action") == True:
                         print("✅ 操作已完成")
