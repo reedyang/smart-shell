@@ -1,2 +1,3 @@
 *.pyc
 llm-filemgr.json
+llm-filemgr*.json
