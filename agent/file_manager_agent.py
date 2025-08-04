@@ -1046,7 +1046,7 @@ big_image.jpg
                     # 提取并执行命令
                     command = self.extract_json_command(ai_response)
                     if not command:
-                        print("❌ 未检测到有效命令，终止本轮。")
+                        # 未检测到有效命令，终止本轮
                         break
                     if command.get("action") == "done":
                         print("✅ AI已声明所有操作完成。");

@@ -283,12 +283,7 @@ AI Agent会：
 💡 AI建议: 文件已整理完成，您可以定期清理 temp 文件夹
 ```
 
-## 演示脚本
-
-### 运行演示
-```bash
-python run_agent.py
-```
+## 演示效果
 ![Convert media demo](demo/convert_media.png "Convert media demo")
 
 ## 许可证
