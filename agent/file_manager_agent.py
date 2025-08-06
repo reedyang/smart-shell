@@ -1045,6 +1045,12 @@ big_image.jpg
                 if not user_input:
                     continue
 
+                # 检查是否为可执行文件，如果是则直接执行
+                if self._is_executable_file(user_input):
+                    # 检测到可执行文件，直接运行
+                    self._execute_file_directly(user_input)
+                    continue
+
                 # 判断是否为常见系统命令
                 if system_cmd_re.match(user_input):
                     if user_input.lower().startswith('ls') and os_name == 'nt':
@@ -1119,3 +1125,87 @@ big_image.jpg
                 break
             except Exception as e:
                 print(f"❌ 发生错误: {str(e)}")
+
+    def _is_executable_file(self, user_input: str) -> bool:
+        """
+        检查输入是否为可执行文件
+        Args:
+            user_input: 用户输入
+        Returns:
+            True if executable, False otherwise
+        """
+        import shutil
+        import os
+        
+        # 去除可能的参数
+        command = user_input.split()[0] if user_input.strip() else ""
+        if not command:
+            return False
+            
+        # 检查是否为绝对路径或相对路径的可执行文件
+        if os.path.isabs(command):
+            # 绝对路径
+            if os.path.isfile(command) and os.access(command, os.X_OK):
+                return True
+        else:
+            # 相对路径或文件名
+            # 1. 检查当前目录
+            current_path = self.work_directory / command
+            if current_path.is_file() and os.access(current_path, os.X_OK):
+                return True
+                
+            # 2. 检查当前目录下的常见可执行文件扩展名
+            for ext in ['.exe', '.bat', '.cmd', '.com', '.py', '.ps1']:
+                current_path_with_ext = self.work_directory / (command + ext)
+                if current_path_with_ext.is_file():
+                    return True
+                    
+            # 3. 检查PATH环境变量
+            if shutil.which(command):
+                return True
+                
+        return False
+    
+    def _execute_file_directly(self, user_input: str) -> bool:
+        """
+        直接执行可执行文件
+        Args:
+            user_input: 用户输入
+        Returns:
+            True if executed successfully, False otherwise
+        """
+        import subprocess
+        import os
+        
+        try:
+            # 在Windows下，如果是Python文件，需要特殊处理
+            if user_input.endswith('.py') or user_input.split()[0].endswith('.py'):
+                # Python文件
+                completed = subprocess.run(['python', user_input], 
+                                         shell=True, 
+                                         capture_output=True, 
+                                         text=True, 
+                                         encoding='utf-8', 
+                                         errors='replace', 
+                                         cwd=str(self.work_directory))
+            else:
+                # 其他可执行文件
+                completed = subprocess.run(user_input, 
+                                         shell=True, 
+                                         capture_output=True, 
+                                         text=True, 
+                                         encoding='utf-8', 
+                                         errors='replace', 
+                                         cwd=str(self.work_directory))
+            
+            # 输出结果
+            if completed.stdout:
+                print(completed.stdout)
+            if completed.stderr:
+                print(completed.stderr)
+                
+            return True
+            
+        except Exception as e:
+            print(f"❌ 执行文件失败: {e}")
+            return False
