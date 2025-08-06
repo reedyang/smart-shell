@@ -7,6 +7,28 @@ from typing import List, Dict, Optional, Any
 import shutil
 from datetime import datetime
 
+# 导入tab补全模块
+import os
+import platform
+
+# 根据操作系统选择合适的输入处理器
+if platform.system() == "Windows":
+    try:
+        from .windows_input import create_windows_input_handler
+        TAB_COMPLETION_AVAILABLE = True
+        INPUT_HANDLER_TYPE = "windows"
+    except ImportError:
+        TAB_COMPLETION_AVAILABLE = False
+        INPUT_HANDLER_TYPE = "none"
+else:
+    try:
+        from .tab_completer import create_tab_completer
+        TAB_COMPLETION_AVAILABLE = True
+        INPUT_HANDLER_TYPE = "readline"
+    except ImportError:
+        TAB_COMPLETION_AVAILABLE = False
+        INPUT_HANDLER_TYPE = "none"
+
 class FileManagerAgent:
     def __init__(self, model_name: str = "gemma3:4b", work_directory: Optional[str] = None, provider: str = "ollama", openai_conf: Optional[dict] = None, openwebui_conf: Optional[dict] = None, params: Optional[dict] = None):
         """
@@ -38,6 +60,23 @@ class FileManagerAgent:
         prompt_path = os.path.join(os.path.dirname(__file__), 'system_prompt.txt')
         with open(prompt_path, 'r', encoding='utf-8') as f:
             self.system_prompt = f.read()
+        
+        # 初始化输入处理器
+        self.input_handler = None
+        if TAB_COMPLETION_AVAILABLE:
+            try:
+                if INPUT_HANDLER_TYPE == "windows":
+                    self.input_handler = create_windows_input_handler(self.work_directory)
+                    print("✅ Windows Tab键自动补全功能已启用")
+                elif INPUT_HANDLER_TYPE == "readline":
+                    self.input_handler = create_tab_completer(self.work_directory)
+                    print("✅ Unix/Linux Tab键自动补全功能已启用")
+                else:
+                    print("⚠️ 未知的输入处理器类型")
+            except Exception as e:
+                print(f"⚠️ 输入处理器初始化失败: {e}")
+        else:
+            print("⚠️ Tab补全功能不可用")
     
     def _validate_model(self):
         """验证模型是否可用（仅ollama模式）"""
@@ -398,6 +437,10 @@ big_image.jpg
             
             old_dir = self.work_directory
             self.work_directory = new_path
+            
+            # 更新输入处理器的工作目录
+            if self.input_handler:
+                self.input_handler.update_work_directory(new_path)
             
             return {
                 "success": True,
@@ -986,8 +1029,12 @@ big_image.jpg
 
         while True:
             try:
-                # 显示完整路径
-                user_input = input(f"\n👤 [{str(self.work_directory)}]: ").strip()
+                # 显示完整路径，使用tab补全
+                if self.input_handler:
+                    user_input = self.input_handler.get_input_with_completion(f"\n👤 [{str(self.work_directory)}]: ").strip()
+                else:
+                    user_input = input(f"\n👤 [{str(self.work_directory)}]: ").strip()
+                
                 if user_input.lower() in ['exit', 'quit', '退出']:
                     break
                 if user_input.lower() == 'cls' or user_input.lower() == 'clear' or user_input.lower() == '清空屏幕':

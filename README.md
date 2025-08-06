@@ -1,290 +1,154 @@
-# 文件管理AI Agent使用说明
-#
-# 支持本地Ollama模型、OpenAI API、OpenWebUI API三种大模型接入方式。
+# LLM File Manager
 
+一个基于大语言模型的智能文件管理器，支持自然语言指令和Tab键自动补全功能。
 
-## 概述
-这是一个基于本地Ollama大模型的AI文件管理助手，可以通过自然语言与用户交互，执行各种文件管理操作。
+## ✨ 主要特性
 
-## 功能特性
+- 🤖 **AI驱动**: 使用大语言模型理解自然语言指令
+- 📁 **文件管理**: 支持文件浏览、复制、移动、删除等操作
+- 🎬 **媒体处理**: 支持视频、音频文件格式转换
+- ⌨️ **Tab补全**: 智能文件名和路径自动补全
+- 📝 **历史记录**: 支持命令历史记录和导航
+- 🔄 **跨平台**: 支持Windows、Linux、macOS
 
-### 🎯 核心功能
-- 📁 **列出目录内容** - 查看文件和文件夹
-- 🔄 **文件重命名** - 重命名文件和文件夹
-- 📦 **文件移动** - 移动文件到其他位置
-- 🗑️ **文件删除** - 安全删除文件和文件夹
-- 📂 **创建文件夹** - 创建新的目录
-- 📋 **文件信息** - 查看文件详细信息
-- 🔀 **目录切换** - 切换当前工作目录
-- 🎬 **处理媒体文件** - 调用ffmpeg命令处理媒体文件
-- 🧠 **智能建议** - 基于操作结果提供后续建议
+## 🚀 快速开始
 
-### 🛡️ 安全特性
-- 删除操作需要确认
-- 防止操作系统重要文件
-- 重命名时检查文件冲突
-- 工作目录限制
+### 环境要求
 
-## 安装依赖
+- Python 3.8+
+- 网络连接（用于AI模型调用）
 
-### 1. 安装Ollama
+### 安装依赖
+
 ```bash
-# 访问 https://ollama.ai 下载并安装Ollama
-# 或者使用包管理器安装
+pip install -r requirements.txt
 ```
 
-### 2. 安装Python依赖
+### 运行程序
+
 ```bash
-pip install ollama
-pip install requests
+python main.py
 ```
 
-### 3. 下载模型
-```bash
-# 下载推荐的模型
-ollama pull gemma3:4b
+## ⌨️ Tab键自动补全功能
 
-# 或者下载其他模型
-ollama pull qwen3:1.7b
-ollama pull llama3.1
-ollama pull mistral
+### Windows版本
+- 使用 `prompt_toolkit` 库实现稳定的Tab补全
+- 支持文件名和路径智能补全
+- 支持历史记录导航（上下箭头键）
+- 支持光标移动（左右箭头键）
+- 无显示问题，体验流畅
+
+### Unix/Linux/macOS版本
+- 使用 `readline` 模块实现Tab补全
+- 原生命令行体验
+
+### 使用方法
+
+1. **文件名补全**: 输入文件名开头部分，按Tab键自动补全
+2. **路径补全**: 支持相对路径和绝对路径的智能补全
+3. **多匹配处理**: 多个匹配项时显示选项列表
+4. **历史导航**: 使用上下箭头键浏览历史命令
+5. **光标控制**: 使用左右箭头键在输入中移动光标
+
+## 🤖 AI功能
+
+### 支持的操作
+
+- **文件浏览**: `列出当前目录的文件`
+- **文件操作**: `复制文件A到目录B`、`删除文件C`
+- **目录操作**: `切换到目录D`、`创建新目录E`
+- **媒体处理**: `将视频转换为MP4格式`
+- **信息查询**: `显示文件详细信息`
+
+### 示例指令
+
+```
+👤 [当前目录]: 列出所有Python文件
+👤 [当前目录]: 复制main.py到backup文件夹
+👤 [当前目录]: 将video.avi转换为MP4格式
+👤 [当前目录]: 切换到上级目录
 ```
 
-## 使用方法
+## 📁 项目结构
 
-### 启动Agent
-```bash
-python main.py       # 使用默认AI模型
-python main.py model # 使用指定的AI模型
+```
+llm-filemgr/
+├── main.py                 # 主程序入口
+├── agent/                  # AI代理模块
+│   ├── file_manager_agent.py  # 文件管理AI代理
+│   ├── windows_input.py       # Windows输入处理器
+│   └── tab_completer.py       # Unix系统Tab补全
+├── demo/                   # 演示文件
+└── README.md              # 项目说明
 ```
 
-### 对话示例
+## 🔧 配置
 
-#### 1. 列出目录内容
-```
-👤 您: 显示当前目录的文件
-👤 您: 列出文件夹内容
-👤 您: 查看这个目录里有什么
-```
+### AI模型配置
 
-#### 2. 重命名文件
-```
-👤 您: 把 old_file.txt 重命名为 new_file.txt
-👤 您: 重命名文件夹 old_folder 为 new_folder
-👤 您: 将 document.docx 改名为 报告.docx
-```
+在 `main.py` 中配置您的AI模型API：
 
-#### 3. 移动文件
-```
-👤 您: 把 file.txt 移动到 ../backup/ 目录
-👤 您: 将所有图片移动到 images 文件夹
-```
-
-#### 4. 删除文件
-```
-👤 您: 删除 temporary.txt
-👤 您: 清理 temp 文件夹
-```
-
-#### 5. 创建文件夹
-```
-👤 您: 创建一个名为 projects 的文件夹
-👤 您: 新建目录 backup
-```
-
-#### 6. 查看文件信息
-```
-👤 您: 查看 document.pdf 的详细信息
-👤 您: 显示 image.jpg 的属性
-```
-
-#### 7. 切换目录
-```
-👤 您: 切换到 documents 目录
-👤 您: 进入 projects 文件夹
-👤 您: 返回上级目录
-👤 您: 切换到 /home/user/Downloads
-```
-
-#### 8. 智能建议
-```
-👤 您: 显示当前目录文件
-🤖 AI: 我看到您有很多临时文件，建议整理一下
-👤 您: 帮我整理这些文件
-🤖 AI: 建议创建一个临时文件夹并移动相关文件
-```
-
-## 配置选项
-
-### 使用外部大模型（OpenAI API 或 OpenWebUI API）
-
-你可以通过在用户主目录或源码根目录下新建 `llm-filemgr.json` 配置文件，指定大模型服务：
-
-```json
-{
-  "provider": "openai", // 可选值: ollama, openai, openwebui
-  "params": {
-    "api_key": "sk-xxx",
-    "base_url": "https://api.openai.com/v1",
-    "model": "gpt-3.5-turbo"
-  }
-}
-```
-
-> ⚠️ JSON标准不允许注释，实际文件请去掉注释行。
-
-配置说明：
-- `provider`：指定使用哪个大模型服务。`ollama`为本地模型，`openai`为OpenAI官方API，`openwebui`为OpenWebUI API。
-- `params`：填写对应API的key、base_url和模型名。
-- 若无此文件或provider为ollama，则默认使用本地ollama。
-
-#### 示例：使用OpenAI API
-```json
-{
-  "provider": "openai",
-  "params": {
-    "api_key": "sk-xxx",
-    "base_url": "https://api.openai.com/v1",
-    "model": "gpt-4o"
-  }
-}
-```
-
-#### 示例：使用OpenWebUI API
-```json
-{
-  "provider": "openwebui",
-  "params": {
-    "api_key": "your-key",
-    "base_url": "http://localhost:8080/v1",
-    "model": "your-model"
-  }
-}
-```
-#### 示例：使用局域网其它设备上部署的Ollama模型
-{
-  "provider": "openai",
-  "params": {
-    "api_key": "",
-    "base_url": "http://<ip address>:11434/v1",
-    "model": "gemma3:4b"
-  }
-}
-
-配置文件查找顺序：
-1. 用户主目录（如 `C:/Users/你的用户名/llm-filemgr.json`）
-2. 源码根目录
-3. 未找到则默认本地ollama
-
-如需切换回本地ollama，只需删除或重命名配置文件，或将provider设为`ollama`。
-
-### 修改模型
 ```python
-# 在 file_manager_agent.py 中修改
-agent = FileManagerAgent(model_name="gemma3:4b")
-```
-
-### 修改工作目录
-```python
-# 指定特定的工作目录
-agent = FileManagerAgent(work_directory="/path/to/your/directory")
-```
-
-## AI指令格式
-
-AI Agent会在回复中包含JSON格式的操作指令：
-
-```json
-{
-    "action": "操作类型",
-    "params": {
-        "参数名": "参数值"
-    }
+# 配置AI模型
+MODEL_CONFIG = {
+    "api_url": "your_api_url",
+    "model_name": "your_model_name"
 }
 ```
 
-### 支持的操作类型
+### 媒体处理配置
 
-| 操作类型 | 参数 | 说明 |
-|---------|------|------|
-| `list` | `path` (可选) | 列出目录内容 |
-| `rename` | `old_name`, `new_name` | 重命名文件/文件夹 |
-| `move` | `source`, `destination` | 移动文件/文件夹 |
-| `delete` | `file_name`, `confirmed` | 删除文件/文件夹 |
-| `mkdir` | `dir_name` | 创建新文件夹 |
-| `info` | `file_name` | 查看文件信息 |
-| `cd` | `path` | 切换当前目录 |
-| `convert` | `source`, `target`,  `options`(可选) | 转换媒体文件格式 |
+确保已安装ffmpeg并配置PATH环境变量：
 
-## 故障排除
-
-### 1. 无法连接到Ollama
 ```bash
-# 检查Ollama是否运行
-ollama list
+# Windows
+# 下载ffmpeg并添加到PATH
 
-# 启动Ollama服务
-ollama serve
+# Linux/macOS
+sudo apt install ffmpeg  # Ubuntu/Debian
+brew install ffmpeg      # macOS
 ```
 
-### 2. 模型不存在
-```bash
-# 查看已安装的模型
-ollama list
+## 🐛 故障排除
 
-# 下载所需模型
-ollama pull gemma3:4b
-```
+### Tab补全问题
 
-### 3. 权限错误
-- 确保对工作目录有读写权限
-- 不要在系统目录中运行
+如果遇到Tab补全问题：
 
-## 注意事项
+1. **Windows用户**: 确保已安装 `prompt_toolkit`
+   ```bash
+   pip install prompt_toolkit
+   ```
 
-### ⚠️ 安全提醒
-1. 首次使用时建议在测试目录中运行
-2. 删除操作不可逆，请谨慎操作
-3. 不要在系统重要目录中使用
-4. 定期备份重要文件
+2. **Unix用户**: 确保系统支持readline
+   ```bash
+   # Ubuntu/Debian
+   sudo apt install libreadline-dev
+   ```
 
-### 💡 使用技巧
-1. 使用自然语言描述您的需求
-2. 可以一次性描述多个操作
-3. 支持中文和英文对话
-4. 如果AI理解有误，可以重新描述
+### 显示问题
 
-## 新功能详解
+- 如果遇到显示问题，程序会自动回退到标准input()函数
+- 确保终端支持ANSI转义序列
 
-### 🔀 目录切换功能
-AI Agent现在支持智能目录切换，可以：
-- 切换到子目录：`cd documents`
-- 返回上级目录：`cd ..`
-- 切换到绝对路径：`cd /home/user/projects`
-- 当前目录显示：提示符会显示当前目录名
+## 📝 更新日志
 
-### 🧠 操作结果反馈
-AI Agent会：
-- 记录每次操作的结果
-- 将操作结果传递给大模型进行分析
-- 基于操作结果提供智能建议
-- 支持连续操作的上下文理解
+### v2.0.0
+- ✅ 使用 `prompt_toolkit` 重新实现Windows Tab补全
+- ✅ 解决所有显示问题和视觉干扰
+- ✅ 提供稳定的用户体验
+- ✅ 支持历史记录和光标导航
 
-### 示例工作流
-```
-👤 您: 显示当前目录文件
-🤖 AI: 执行 list 命令...
-📁 显示文件列表
-💡 AI建议: 我看到有很多临时文件，建议整理一下
+### v1.0.0
+- 🎉 初始版本发布
+- 🤖 基础AI文件管理功能
+- 📁 文件操作支持
 
-👤 您: 帮我整理临时文件
-🤖 AI: 我建议创建一个 temp 文件夹并移动临时文件
-⚡ 执行创建文件夹和移动操作...
-💡 AI建议: 文件已整理完成，您可以定期清理 temp 文件夹
-```
+## 🤝 贡献
 
-## 演示效果
-![Convert media demo](demo/convert_media.png "Convert media demo")
+欢迎提交Issue和Pull Request！
 
-## 许可证
+## 📄 许可证
+
 MIT License
