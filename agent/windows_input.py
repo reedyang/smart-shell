@@ -28,24 +28,21 @@ class FileCompleter(Completer):
         """获取补全选项"""
         text = document.text_before_cursor
         
-        # 检查是否包含命令前缀（如 "dir ", "ls ", "cd " 等）
-        command_prefix = ""
-        file_part = text
+        # 如果输入为空或只有空白字符，直接返回所有文件
+        if not text or text.strip() == "":
+            completions = self._get_directory_contents()
+            seen = set()
+            for completion in completions:
+                if completion not in seen:
+                    seen.add(completion)
+                    yield Completion(completion, start_position=-len(text))
+            return
         
-        # 常见的文件管理命令
-        commands = ["dir ", "ls ", "cd ", "copy ", "move ", "del ", "rm ", "mkdir ", "type ", "cat "]
-        
-        for cmd in commands:
-            if text.startswith(cmd):
-                command_prefix = cmd
-                file_part = text[len(cmd):]
-                break
+        # 智能检测文件名部分
+        file_part, prefix, suffix = self._extract_file_part(text)
         
         # 获取文件补全选项
-        if not file_part:
-            # 空文件部分，返回当前目录的所有文件和文件夹
-            completions = self._get_directory_contents()
-        elif '/' in file_part or '\\' in file_part:
+        if '/' in file_part or '\\' in file_part:
             # 路径补全
             completions = self._get_path_completions(file_part)
         else:
@@ -57,14 +54,66 @@ class FileCompleter(Completer):
         for completion in completions:
             if completion not in seen:
                 seen.add(completion)
-                # 如果有命令前缀，需要包含前缀
-                if command_prefix:
-                    full_completion = command_prefix + completion
-                    # 计算需要替换的字符数（包括命令前缀）
-                    yield Completion(full_completion, start_position=-len(text))
-                else:
-                    # 使用负数的start_position来替换已输入的文本
-                    yield Completion(completion, start_position=-len(text))
+                # 构建完整的补全结果
+                full_completion = prefix + completion + suffix
+                yield Completion(full_completion, start_position=-len(text))
+    
+    def _extract_file_part(self, text: str) -> tuple:
+        """
+        智能提取输入文本中的文件名部分
+        Args:
+            text: 输入文本
+        Returns:
+            (file_part, prefix, suffix) - 文件名部分、前缀、后缀
+        """
+
+        # 获取当前目录的所有文件名
+        try:
+            current_files = [item.name for item in self.work_directory.iterdir() if not item.name.startswith('.')]
+        except Exception:
+            current_files = []
+        
+        # 智能检测：查找可能匹配当前目录文件名的部分
+        words = text.split()
+        if not words:
+            return "", "", ""
+        
+        # 策略1：检查最后一个词是否匹配文件名开头
+        last_word = words[-1]
+        for filename in current_files:
+            if filename.lower().startswith(last_word.lower()):
+                prefix = " ".join(words[:-1])
+                if prefix:
+                    prefix += " "
+                return last_word, prefix, ""
+        
+        # 策略2：检查最后几个词组合是否匹配文件名
+        for i in range(len(words), 0, -1):
+            candidate = " ".join(words[i-1:])
+            for filename in current_files:
+                if filename.lower().startswith(candidate.lower()):
+                    prefix = " ".join(words[:i-1])
+                    if prefix:
+                        prefix += " "
+                    return candidate, prefix, ""
+        
+        # 策略3：检查是否包含完整的文件名（带扩展名）
+        for filename in current_files:
+            if filename.lower() in text.lower():
+                # 找到文件名在文本中的位置
+                filename_lower = filename.lower()
+                text_lower = text.lower()
+                start_pos = text_lower.find(filename_lower)
+                if start_pos != -1:
+                    prefix = text[:start_pos]
+                    suffix = text[start_pos + len(filename):]
+                    return filename, prefix, suffix
+        
+        # 策略4：如果没有找到匹配，使用最后一个词作为候选
+        prefix = " ".join(words[:-1])
+        if prefix:
+            prefix += " "
+        return last_word, prefix, ""
     
     def _get_directory_contents(self) -> List[str]:
         """获取当前目录的内容"""
