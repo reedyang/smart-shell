@@ -695,7 +695,7 @@ big_image.jpg
             return {"success": False, "error": f"总结文件失败: {str(e)}"}
     
     def action_shell_command(self, command: str) -> dict:
-        """执行任意系统命令，返回输出和错误信息"""
+        """执行任意系统命令，支持实时输出和交互输入"""
         # 请求用户确实是否执行这条命令
         if not command.strip():
             return {"success": False, "error": "命令不能为空"}
@@ -704,15 +704,26 @@ big_image.jpg
             return {"success": False, "error": "用户取消了操作"}
 
         import subprocess
+        import sys
         try:
-            # Windows下建议用shell=True，Linux下shell=False更安全
-            result = subprocess.run(command, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=str(self.work_directory))
-            return {
-                "success": result.returncode == 0,
-                "stdout": result.stdout.strip(),
-                "stderr": result.stderr.strip(),
-                "returncode": result.returncode
-            }
+            # 使用Popen启动进程，让进程继承当前终端，支持交互
+            process = subprocess.Popen(
+                command,
+                shell=True,
+                stdin=sys.stdin,      # 继承当前终端的输入
+                stdout=sys.stdout,    # 继承当前终端的输出
+                stderr=sys.stderr,    # 继承当前终端的错误输出
+                cwd=str(self.work_directory)
+            )
+            
+            # 等待进程结束
+            return_code = process.wait()
+            
+            if return_code == 0:
+                return {"success": True, "message": "命令执行成功"}
+            else:
+                return {"success": False, "error": f"命令执行失败，退出码: {return_code}"}
+                
         except Exception as e:
             return {"success": False, "error": f"系统命令执行异常: {str(e)}"}
         
@@ -1001,6 +1012,8 @@ big_image.jpg
 
     def run(self):
         """运行AI Agent主循环，支持自动多轮命令执行，AI可根据上次执行结果继续生成命令，遇到{"action": "done"}时终止。"""
+        import sys
+        
         print("🤖 增强版文件管理AI Agent已启动")
         print(f"📁 当前工作目录: {self.work_directory}")
         print(f"🧠 使用模型: {self.model_name}")
@@ -1071,12 +1084,23 @@ big_image.jpg
                             else:
                                 print(f"❌ {result['error']}")
                         else:
-                            # 其它命令直接用subprocess
-                            completed = subprocess.run(user_input, shell=True, capture_output=True, text=True, encoding='utf-8', errors='replace', cwd=str(self.work_directory))
-                            if completed.stdout:
-                                print(completed.stdout)
-                            if completed.stderr:
-                                print(completed.stderr)
+                            # 其它命令直接用subprocess，继承当前终端
+                            try:
+                                process = subprocess.Popen(
+                                    user_input,
+                                    shell=True,
+                                    stdin=sys.stdin,
+                                    stdout=sys.stdout,
+                                    stderr=sys.stderr,
+                                    cwd=str(self.work_directory)
+                                )
+                                
+                                # 等待进程结束
+                                return_code = process.wait()
+                                if return_code != 0:
+                                    print(f"⚠️ 命令退出码: {return_code}")
+                            except Exception as e:
+                                print(f"❌ 命令执行异常: {e}")
                     except Exception as e:
                         print(f"❌ 系统命令执行异常: {e}")
                     continue
@@ -1168,7 +1192,7 @@ big_image.jpg
     
     def _execute_file_directly(self, user_input: str) -> bool:
         """
-        直接执行可执行文件
+        直接执行可执行文件，实时显示输出并支持交互输入
         Args:
             user_input: 用户输入
         Returns:
@@ -1176,36 +1200,36 @@ big_image.jpg
         """
         import subprocess
         import os
+        import sys
         
         try:
             # 在Windows下，如果是Python文件，需要特殊处理
             if user_input.endswith('.py') or user_input.split()[0].endswith('.py'):
                 # Python文件
-                completed = subprocess.run(['python', user_input], 
-                                         shell=True, 
-                                         capture_output=True, 
-                                         text=True, 
-                                         encoding='utf-8', 
-                                         errors='replace', 
-                                         cwd=str(self.work_directory))
+                cmd = ['python', user_input]
             else:
                 # 其他可执行文件
-                completed = subprocess.run(user_input, 
-                                         shell=True, 
-                                         capture_output=True, 
-                                         text=True, 
-                                         encoding='utf-8', 
-                                         errors='replace', 
-                                         cwd=str(self.work_directory))
+                cmd = user_input
             
-            # 输出结果
-            if completed.stdout:
-                print(completed.stdout)
-            if completed.stderr:
-                print(completed.stderr)
+            # 使用Popen启动进程，让进程继承当前终端，支持交互
+            process = subprocess.Popen(
+                cmd,
+                shell=True,
+                stdin=sys.stdin,      # 继承当前终端的输入
+                stdout=sys.stdout,    # 继承当前终端的输出
+                stderr=sys.stderr,    # 继承当前终端的错误输出
+                cwd=str(self.work_directory)
+            )
+            
+            # 等待进程结束
+            return_code = process.wait()
+            
+            if return_code == 0:
+                return True
+            else:
+                print(f"⚠️ 进程退出码: {return_code}")
+                return False
                 
-            return True
-            
         except Exception as e:
             print(f"❌ 执行文件失败: {e}")
             return False
