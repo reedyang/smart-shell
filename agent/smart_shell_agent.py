@@ -1672,8 +1672,15 @@ big_image.jpg
         
         while True:
             # 显示当前输入
-            clear_line()
-            sys.stdout.write(prompt + current_input)
+            # 移动到行首并显示完整内容
+            sys.stdout.write('\r' + prompt + current_input)
+            # 清空后面的残影
+            sys.stdout.write('\033[K')
+            # 如果光标不在末尾，移动到正确位置
+            if cursor_position < len(current_input):
+                # 使用ANSI转义序列向左移动光标
+                move_left = len(current_input) - cursor_position
+                sys.stdout.write(f'\033[{move_left}D')
             sys.stdout.flush()
             
             # 获取按键
@@ -1704,9 +1711,17 @@ big_image.jpg
                             else:
                                 current_input = ""
                                 cursor_position = 0
-                    elif key == b'\x1b':  # Escape键
-                        print()  # 换行
-                        return ""
+                        elif key2 == b'K':  # 左箭头键
+                            # 向左移动光标
+                            if cursor_position > 0:
+                                cursor_position -= 1
+                        elif key2 == b'M':  # 右箭头键
+                            # 向右移动光标
+                            if cursor_position < len(current_input):
+                                cursor_position += 1
+                        elif key2 == b'\x1b':  # Escape键
+                            print()  # 换行
+                            return ""
                     elif key >= b' ' and key <= b'~':  # 可打印字符
                         char = key.decode('utf-8', errors='ignore')
                         current_input = current_input[:cursor_position] + char + current_input[cursor_position:]
