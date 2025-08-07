@@ -50,8 +50,21 @@ class SmartShellAgent:
         self.conversation_history = []
         self.operation_results = []
         
-        # 初始化历史记录管理器
-        self.history_manager = HistoryManager()
+        # 初始化历史记录管理器，使用config.json所在的目录
+        # 首先尝试在当前目录查找配置文件
+        current_config_dir = Path(".smartshell")
+        user_config_dir = Path.home() / ".smartshell"
+        
+        # 如果用户目录下有配置文件，使用用户目录
+        if (user_config_dir / "config.json").exists():
+            config_dir = user_config_dir
+        elif (current_config_dir / "config.json").exists():
+            config_dir = current_config_dir
+        else:
+            # 默认使用用户目录
+            config_dir = user_config_dir
+            
+        self.history_manager = HistoryManager(str(config_dir))
         
         # 支持新的双模型配置
         if normal_config and vision_config:
