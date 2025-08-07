@@ -7,6 +7,9 @@ from typing import List, Dict, Optional, Any
 import shutil
 from datetime import datetime
 
+# 导入历史记录管理器
+from .history_manager import HistoryManager
+
 # 导入tab补全模块
 import os
 import platform
@@ -46,6 +49,9 @@ class SmartShellAgent:
         self.work_directory = Path(work_directory) if work_directory else Path.cwd()
         self.conversation_history = []
         self.operation_results = []
+        
+        # 初始化历史记录管理器
+        self.history_manager = HistoryManager()
         
         # 支持新的双模型配置
         if normal_config and vision_config:
@@ -1488,11 +1494,12 @@ big_image.jpg
 
         while True:
             try:
-                # 显示完整路径，使用tab补全
-                if self.input_handler:
-                    user_input = self.input_handler.get_input_with_completion(f"👤 [{str(self.work_directory)}]: ").strip()
-                else:
-                    user_input = input(f"👤 [{str(self.work_directory)}]: ").strip()
+                # 获取用户输入，支持历史记录
+                user_input = self._get_user_input_with_history()
+                
+                # 保存到历史记录（非空输入）
+                if user_input.strip():
+                    self.history_manager.add_entry(user_input)
                 
                 if user_input.lower() in ['exit', 'quit', '退出']:
                     break
@@ -1632,6 +1639,89 @@ big_image.jpg
                 return True
                 
         return False
+    
+    def _get_user_input_with_history(self) -> str:
+        """
+        获取用户输入，支持历史记录导航
+        Returns:
+            用户输入的字符串
+        """
+        import sys
+        import msvcrt
+        import platform
+        
+        prompt = f"👤 [{str(self.work_directory)}]: "
+        current_input = ""
+        cursor_position = 0
+        
+        # 重置历史记录索引
+        self.history_manager.reset_index()
+        
+        def clear_line():
+            """清空当前行"""
+            # 移动到行首
+            sys.stdout.write('\r')
+            # 使用ANSI转义序列清空从光标到行尾的内容
+            sys.stdout.write('\033[K')
+            # 备用方案：如果ANSI不支持，用空格覆盖
+            # 使用适中的长度，既能清除残影又不会产生空行
+            backup_length = len(prompt) + len(current_input) + 20
+            sys.stdout.write(' ' * backup_length)
+            sys.stdout.write('\r')
+            sys.stdout.flush()
+        
+        while True:
+            # 显示当前输入
+            clear_line()
+            sys.stdout.write(prompt + current_input)
+            sys.stdout.flush()
+            
+            # 获取按键
+            if platform.system() == "Windows":
+                try:
+                    key = msvcrt.getch()
+                    if key == b'\r':  # Enter键
+                        print()  # 换行
+                        return current_input.strip()
+                    elif key == b'\x08':  # Backspace键
+                        if cursor_position > 0:
+                            current_input = current_input[:cursor_position-1] + current_input[cursor_position:]
+                            cursor_position -= 1
+                    elif key == b'\xe0':  # 特殊键前缀
+                        key2 = msvcrt.getch()
+                        if key2 == b'H':  # 上箭头键
+                            # 获取上一条历史记录
+                            prev_history = self.history_manager.get_previous()
+                            if prev_history:
+                                current_input = prev_history
+                                cursor_position = len(current_input)
+                        elif key2 == b'P':  # 下箭头键
+                            # 获取下一条历史记录
+                            next_history = self.history_manager.get_next()
+                            if next_history:
+                                current_input = next_history
+                                cursor_position = len(current_input)
+                            else:
+                                current_input = ""
+                                cursor_position = 0
+                    elif key == b'\x1b':  # Escape键
+                        print()  # 换行
+                        return ""
+                    elif key >= b' ' and key <= b'~':  # 可打印字符
+                        char = key.decode('utf-8', errors='ignore')
+                        current_input = current_input[:cursor_position] + char + current_input[cursor_position:]
+                        cursor_position += 1
+                except KeyboardInterrupt:
+                    print("\n👋 程序已中断，再见！")
+                    sys.exit(0)
+            else:
+                # 非Windows系统使用简单的input
+                try:
+                    user_input = input(prompt)
+                    return user_input.strip()
+                except KeyboardInterrupt:
+                    print("\n👋 程序已中断，再见！")
+                    sys.exit(0)
     
     def _execute_file_directly(self, user_input: str) -> bool:
         """

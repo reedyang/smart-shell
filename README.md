@@ -168,6 +168,10 @@ brew install ffmpeg      # macOS
 - 检查API密钥和URL是否正确
 - 对于Ollama模型，确保模型已下载并可用
 
+## 演示效果
+![Convert media](demo/convert_media.png)
+![Git command](demo/git_command.png)
+
 ## 🤝 贡献
 
 欢迎提交Issue和Pull Request！
