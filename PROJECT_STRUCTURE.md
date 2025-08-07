@@ -2,12 +2,16 @@
 
 ## 目录结构
 ```
-ds/
-├── agent/                         # Agent核心模块
-│   ├── __init__.py                # 包初始化文件
-│   ├── smart_shell_agent.py       # 主要的Smart Shell AI Agent实现
-│   ├── demo_file_manager.py       # 功能演示脚本
-└── main.py                        # 主启动脚本
+smart-shell/
+├── main.py                        # 主程序入口
+├── .smartshell                    # 配置目录
+|   ├── config.json                # 配置文件
+├── agent/                         # AI代理模块
+│   ├── smart_shell_agent.py       # Smart Shell AI代理
+│   ├── windows_input.py           # Windows输入处理器
+│   └── tab_completer.py           # Unix系统Tab补全
+├── demo/                          # 演示文件
+└── README.md                      # 项目说明
 ```
 
 ## 使用方法

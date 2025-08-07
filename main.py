@@ -26,10 +26,10 @@ def main():
     config = None
     config_path = None
     
-    # 优先查找用户主目录下的smart-shell-config.json
+    # 优先查找用户主目录下的.smartshell/config.json
     user_home = str(Path.home())
-    user_config = os.path.join(user_home, "smart-shell-config.json")
-    local_config = os.path.join(current_dir, "smart-shell-config.json")
+    user_config = os.path.join(user_home, ".smartshell/config.json")
+    local_config = os.path.join(current_dir, ".smartshell/config.json")
     
     if os.path.exists(user_config):
         config_path = user_config

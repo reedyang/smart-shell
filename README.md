@@ -86,7 +86,8 @@ python main.py
 ```
 smart-shell/
 ├── main.py                        # 主程序入口
-├── smart-shell-config.json        # 配置文件
+├── .smartshell                    # 配置目录
+|   ├── config.json                # 配置文件
 ├── agent/                         # AI代理模块
 │   ├── smart_shell_agent.py       # Smart Shell AI代理
 │   ├── windows_input.py           # Windows输入处理器
@@ -99,7 +100,7 @@ smart-shell/
 - 必须配置normal_model
 - 可选配置vision_model以支持图片解析
 
-创建 `smart-shell-config.json` 配置文件，支持为不同任务配置不同的AI模型：
+创建 `.smartshell/config.json` 配置文件，支持为不同任务配置不同的AI模型：
 
 ```json
 {
