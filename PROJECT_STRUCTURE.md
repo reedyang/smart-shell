@@ -3,16 +3,16 @@
 ## 目录结构
 ```
 ds/
-├── agent/                          # AI Agent核心模块
+├── agent/                         # Agent核心模块
 │   ├── __init__.py                # 包初始化文件
-│   ├── file_manager_agent.py      # 主要的AI Agent实现
+│   ├── smart_shell_agent.py       # 主要的Smart Shell AI Agent实现
 │   ├── demo_file_manager.py       # 功能演示脚本
 └── main.py                        # 主启动脚本
 ```
 
 ## 使用方法
 
-### 1. 运行AI Agent
+### 1. 运行 Smart Shell
 ```bash
 python main.py       # 使用默认AI模型
 python main.py model # 使用指定的AI模型

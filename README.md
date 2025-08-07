@@ -1,11 +1,11 @@
-# LLM File Manager
+# Smart Shell
 
-一个基于大语言模型的智能文件管理器，支持自然语言指令和Tab键自动补全功能。
+一个基于大语言模型的智能Shell，支持自然语言指令和Tab键自动补全功能。
 
 ## ✨ 主要特性
 
 - 🤖 **AI驱动**: 使用大语言模型理解自然语言指令
-- 📁 **文件管理**: 支持文件浏览、复制、移动、删除等操作
+- 📁 **智能文件管理**: 支持文件浏览、复制、移动、删除等操作
 - 🎬 **媒体处理**: 支持视频、音频文件格式转换
 - 🖼️ **图片解读**: 使用AI分析图片中的文字、物体、场景等信息
 - ⌨️ **Tab补全**: 智能文件名和路径自动补全
@@ -84,22 +84,22 @@ python main.py
 ## 📁 项目结构
 
 ```
-llm-filemgr/
-├── main.py                 # 主程序入口
-├── llm-filemgr.json        # 配置文件
-├── agent/                  # AI代理模块
-│   ├── file_manager_agent.py  # 文件管理AI代理
-│   ├── windows_input.py       # Windows输入处理器
-│   └── tab_completer.py       # Unix系统Tab补全
-├── demo/                   # 演示文件
-└── README.md              # 项目说明
+smart-shell/
+├── main.py                        # 主程序入口
+├── smart-shell-config.json        # 配置文件
+├── agent/                         # AI代理模块
+│   ├── smart_shell_agent.py       # Smart Shell AI代理
+│   ├── windows_input.py           # Windows输入处理器
+│   └── tab_completer.py           # Unix系统Tab补全
+├── demo/                          # 演示文件
+└── README.md                      # 项目说明
 ```
 
 ## 🔧 配置
 
 ### 双模型配置（推荐）
 
-创建 `llm-filemgr.json` 配置文件，支持为不同任务配置不同的AI模型：
+创建 `smart-shell-config.json` 配置文件，支持为不同任务配置不同的AI模型：
 
 ```json
 {
@@ -123,7 +123,7 @@ llm-filemgr/
 ```
 
 **配置说明**:
-- `normal_model`: 用于普通文件管理任务的模型（如文件操作、目录浏览等）
+- `normal_model`: 用于普通任务的模型（如文件操作、目录浏览等）
 - `vision_model`: 用于图像处理的视觉模型（需要支持视觉功能）
 - `provider`: 支持 `ollama`、`openai`、`openwebui`
 - `params`: 包含API密钥、基础URL和模型名称
@@ -198,7 +198,7 @@ brew install ffmpeg      # macOS
 
 ### v1.0.0
 - 🎉 初始版本发布
-- 🤖 基础AI文件管理功能
+- 🤖 基础AI智能Shell功能
 - 📁 文件操作支持
 
 ## 🤝 贡献

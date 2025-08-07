@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
-文件管理AI Agent主启动脚本
+Smart Shell主启动脚本
 
 用法：
-    python main.py       # 使用配置文件中的双模型配置
-    python main.py model # 使用指定的AI模型（兼容旧格式）
+    python main.py       # 使用配置文件中的模型配置
 """
 
 import sys
@@ -17,74 +16,66 @@ current_dir = Path(__file__).parent
 agent_dir = current_dir / "agent"
 sys.path.insert(0, str(agent_dir))
 
-from agent.file_manager_agent import FileManagerAgent
+from agent.smart_shell_agent import SmartShellAgent
 
 def main():
     """主函数"""
-    print("🚀 启动文件管理AI Agent...")
+    print("启动 Smart Shell...")
     
     work_directory = None
-    # 命令行参数优先，若有参数则直接用为ollama模型并忽略配置文件
-    if len(sys.argv) > 1:
-        model_name = sys.argv[1]
-        provider = "ollama"
-        params = None
-        config = None
-        normal_config = None
-        multimodal_config = None
-    else:
-        config = None
-        config_path = None
-        # 优先查找用户主目录下的llm-filemgr.json
-        user_home = str(Path.home())
-        user_config = os.path.join(user_home, "llm-filemgr.json")
-        local_config = os.path.join(current_dir, "llm-filemgr.json")
-        if os.path.exists(user_config):
-            config_path = user_config
-        elif os.path.exists(local_config):
-            config_path = local_config
-        if config_path:
-            try:
-                with open(config_path, "r", encoding="utf-8") as f:
-                    config = json.load(f)
-            except Exception as e:
-                print(f"⚠️ 配置文件读取失败: {e}")
-                config = None
-        
-        # 解析新的双模型配置
-        normal_config = None
-        multimodal_config = None
-        if config:
-            # 检查是否为新的双模型配置格式
-            if "normal_model" in config and "vision_model" in config:
-                print("📋 检测到双模型配置格式")
-                normal_config = config.get("normal_model", {})
-                vision_config = config.get("vision_model", {})
-                print(f"🤖 普通任务模型: {normal_config.get('provider', 'unknown')} - {normal_config.get('params', {}).get('model', 'unknown')}")
-                print(f"🖼️ 视觉模型: {vision_config.get('provider', 'unknown')} - {vision_config.get('params', {}).get('model', 'unknown')}")
-            else:
-                # 兼容旧格式
-                print("📋 使用兼容模式（单模型配置）")
-                provider = config.get("provider", "ollama").lower()
-                params = config.get("params")
-                if provider in ("openai", "openwebui") and params:
-                    model_name = params.get("model", "gpt-3.5-turbo")
-                elif provider == "ollama":
-                    model_name = params.get("model", "gemma3:4b") if params else "gemma3:4b"
-                else:
-                    model_name = "gemma3:4b"
-                    provider = "ollama"
-                    params = None
+    config = None
+    config_path = None
+    
+    # 优先查找用户主目录下的smart-shell-config.json
+    user_home = str(Path.home())
+    user_config = os.path.join(user_home, "smart-shell-config.json")
+    local_config = os.path.join(current_dir, "smart-shell-config.json")
+    
+    if os.path.exists(user_config):
+        config_path = user_config
+    elif os.path.exists(local_config):
+        config_path = local_config
+    
+    if config_path:
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+        except Exception as e:
+            print(f"⚠️ 配置文件读取失败: {e}")
+            config = None
+    
+    # 解析配置
+    normal_config = None
+    vision_config = None
+    
+    if config:
+        # 检查是否为新的双模型配置格式
+        if "normal_model" in config:
+            normal_config = config.get("normal_model", {})
+            provider = normal_config.get('provider', 'unknown')
+            params = normal_config.get('params', {})
+            model_name = params.get('model', 'unknown')
+            print(f"普通任务模型: {normal_config.get('provider', 'unknown')} - {normal_config.get('params', {}).get('model', 'unknown')}")
+
+        if "vision_model" in config:
+            vision_config = config.get("vision_model", {})
+            print(f"视觉模型: {vision_config.get('provider', 'unknown')} - {vision_config.get('params', {}).get('model', 'unknown')}")
         else:
-            # 默认配置
-            model_name = "gemma3:4b"
-            provider = "ollama"
-            params = None
+            print("未配置视觉模型, 不支持视觉任务")
+
+        if not normal_config:
+            print("未配置普通任务模型")
+            return 1
+        
+    else:
+        # 默认配置
+        print("📋 未找到配置文件")
+        return 1
 
     # 如果使用双模型配置
     if normal_config and vision_config:
         try:
-            agent = FileManagerAgent(
+            agent = SmartShellAgent(
                 work_directory=work_directory,
                 normal_config=normal_config,
                 vision_config=vision_config
@@ -95,11 +86,10 @@ def main():
             print(f"❌ 双模型配置运行错误: {str(e)}")
             return 1
     
-    # 兼容旧格式的单模型配置
+    # 启动 Agent
     if provider == "openai" and params:
-        print(f"🤖 使用OpenAI API: {params.get('base_url', 'https://api.openai.com/v1')} 模型: {model_name}")
         try:
-            agent = FileManagerAgent(
+            agent = SmartShellAgent(
                 model_name=model_name,
                 work_directory=work_directory,
                 provider="openai",
@@ -111,9 +101,8 @@ def main():
             print(f"❌ OpenAI API模式运行错误: {str(e)}")
             return 1
     elif provider == "openwebui" and params:
-        print(f"🤖 使用OpenWebUI API: {params.get('base_url', 'http://localhost:8080/v1')} 模型: {model_name}")
         try:
-            agent = FileManagerAgent(
+            agent = SmartShellAgent(
                 model_name=model_name,
                 work_directory=work_directory,
                 provider="openwebui",
@@ -124,8 +113,8 @@ def main():
         except Exception as e:
             print(f"❌ OpenWebUI API模式运行错误: {str(e)}")
             return 1
-    else:
-        # 默认ollama本地
+    elif provider == "ollama" and params:
+        # ollama本地
         try:
             import ollama
             models = ollama.list()
@@ -137,7 +126,6 @@ def main():
                     available_models.append(model.get('name', model.get('model', 'unknown')))
                 else:
                     available_models.append(str(model))
-            print(f"📋 可用模型: {available_models}")
             if model_name not in available_models:
                 print(f"⚠️ 指定模型 {model_name} 不可用")
                 if available_models:
@@ -154,7 +142,7 @@ def main():
             print("请确保Ollama服务正在运行")
             return 1
         try:
-            agent = FileManagerAgent(
+            agent = SmartShellAgent(
                 model_name=model_name,
                 work_directory=work_directory,
                 provider="ollama"
@@ -167,6 +155,9 @@ def main():
         except Exception as e:
             print(f"❌ 运行错误: {str(e)}")
             return 1
+    else:
+        print(f"模型 provider {provider} 不被支持")
+        return 1
 
 if __name__ == "__main__":
     sys.exit(main()) 

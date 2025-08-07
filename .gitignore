@@ -1,3 +1,2 @@
 *.pyc
-llm-filemgr.json
-llm-filemgr*.json
+smart-shell-config*.json

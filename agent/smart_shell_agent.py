@@ -29,10 +29,10 @@ else:
         TAB_COMPLETION_AVAILABLE = False
         INPUT_HANDLER_TYPE = "none"
 
-class FileManagerAgent:
+class SmartShellAgent:
     def __init__(self, model_name: str = "gemma3:4b", work_directory: Optional[str] = None, provider: str = "ollama", openai_conf: Optional[dict] = None, openwebui_conf: Optional[dict] = None, params: Optional[dict] = None, normal_config: Optional[dict] = None, vision_config: Optional[dict] = None):
         """
-        初始化文件管理AI Agent
+        初始化Smart Shell
         Args:
             model_name: 模型名称（兼容旧格式）
             work_directory: 工作目录
@@ -69,10 +69,7 @@ class FileManagerAgent:
             self.params = self.normal_params
             self.openai_conf = self.normal_params if self.normal_provider == "openai" else None
             self.openwebui_conf = self.normal_params if self.normal_provider == "openwebui" else None
-            
-            print(f"🤖 双模型模式已启用")
-            print(f"   📝 普通任务: {self.normal_provider} - {self.normal_model_name}")
-            print(f"   🖼️ 视觉模型: {self.vision_provider} - {self.vision_model_name}")
+
         else:
             # 兼容旧格式
             self.dual_model_mode = False
@@ -100,10 +97,10 @@ class FileManagerAgent:
             try:
                 if INPUT_HANDLER_TYPE == "windows":
                     self.input_handler = create_windows_input_handler(self.work_directory)
-                    print("✅ Windows Tab键自动补全功能已启用")
+
                 elif INPUT_HANDLER_TYPE == "readline":
                     self.input_handler = create_tab_completer(self.work_directory)
-                    print("✅ Unix/Linux Tab键自动补全功能已启用")
+
                 else:
                     print("⚠️ 未知的输入处理器类型")
             except Exception as e:
@@ -141,8 +138,12 @@ class FileManagerAgent:
                 print(f"📋 可用模型: {available_models}")
                 if available_models:
                     print(f"💡 建议使用: {available_models[0]}")
+                print(f"💡 请检查 llm-filemgr.json 中的 {model_type.lower().replace('模型', '_model')} 配置")
+        except ImportError:
+            print(f"❌ 错误: 未安装 ollama 包，无法验证 {model_type}。请运行: pip install ollama")
         except Exception as e:
             print(f"⚠️ 验证{model_type}时出错: {e}")
+            print(f"💡 请确保 Ollama 服务正在运行")
 
     def call_ai(self, user_input: str, context: str = "", stream: bool = False):
         """调用大模型API获取AI回复，支持流式输出。stream=True时返回生成器"""
@@ -169,12 +170,20 @@ class FileManagerAgent:
                 params = self.normal_params
                 openai_conf = params if provider == "openai" else None
                 openwebui_conf = params if provider == "openwebui" else None
+                
+                # 检查普通任务模型配置
+                if not provider or not model_name:
+                    return "❌ 错误：普通任务模型未正确配置。请检查 llm-filemgr.json 中的 normal_model 配置。"
             else:
                 # 单模型模式：使用原有配置
                 provider = self.provider
                 model_name = self.model_name
                 openai_conf = self.openai_conf
                 openwebui_conf = self.openwebui_conf
+                
+                # 检查单模型配置
+                if not provider or not model_name:
+                    return "❌ 错误：模型未正确配置。请检查 llm-filemgr.json 配置文件。"
 
             if provider == "openai" and openai_conf:
                 import requests
@@ -183,6 +192,11 @@ class FileManagerAgent:
                 api_key = openai_conf.get("api_key")
                 base_url = openai_conf.get("base_url", "https://api.openai.com/v1")
                 model = model_name
+                
+                # 检查OpenAI配置
+                if not api_key:
+                    return "❌ 错误：OpenAI API密钥未配置。请在 llm-filemgr.json 中设置 api_key。"
+                
                 url = base_url.rstrip("/") + "/chat/completions"
                 headers = {
                     "Authorization": f"Bearer {api_key}",
@@ -228,6 +242,11 @@ class FileManagerAgent:
                 api_key = openwebui_conf.get("api_key")
                 base_url = openwebui_conf.get("base_url", "http://localhost:8080/v1")
                 model = model_name
+                
+                # 检查OpenWebUI配置
+                if not api_key:
+                    return "❌ 错误：OpenWebUI API密钥未配置。请在 llm-filemgr.json 中设置 api_key。"
+                
                 url = base_url.rstrip("/") + "/chat/completions"
                 headers = {
                     "Authorization": f"Bearer {api_key}",
@@ -266,7 +285,15 @@ class FileManagerAgent:
                     self.conversation_history.append({"role": "assistant", "content": ai_response})
                     return ai_response
             else:
-                import ollama
+                # 检查是否为Ollama提供者
+                if provider != "ollama":
+                    return f"❌ 错误：不支持的模型提供者 '{provider}'。支持的提供者：ollama, openai, openwebui"
+                
+                try:
+                    import ollama
+                except ImportError:
+                    return "❌ 错误：未安装 ollama 包。请运行：pip install ollama"
+                
                 if stream:
                     response = ollama.chat(
                         model=model_name,
@@ -328,15 +355,27 @@ class FileManagerAgent:
                 params = self.vision_params
                 openai_conf = params if provider == "openai" else None
                 openwebui_conf = params if provider == "openwebui" else None
+                
+                # 检查视觉模型配置
+                if not provider or not model_name:
+                    return "❌ 错误：视觉模型未正确配置。请检查 llm-filemgr.json 中的 vision_model 配置。"
             else:
                 # 单模型模式：使用原有配置
                 provider = self.provider
                 model_name = self.model_name
                 openai_conf = self.openai_conf
                 openwebui_conf = self.openwebui_conf
+                
+                # 检查单模型配置
+                if not provider or not model_name:
+                    return "❌ 错误：模型未正确配置。请检查 llm-filemgr.json 配置文件。"
 
             if provider == "ollama":
-                import ollama
+                try:
+                    import ollama
+                except ImportError:
+                    return "❌ 错误：未安装 ollama 包。请运行：pip install ollama"
+                
                 if stream:
                     response = ollama.chat(
                         model=model_name,
@@ -365,7 +404,7 @@ class FileManagerAgent:
                     return ai_response
             else:
                 # 对于不支持多模态的提供者，回退到文本模式
-                return self.call_ai(user_input, context, stream)
+                return f"⚠️ 警告：{provider} 提供者不支持多模态功能，回退到文本模式。\n" + self.call_ai(user_input, context, stream)
                 
         except Exception as e:
             error_msg = f"调用多模态大模型API时出错: {str(e)} (provider: {provider}, model: {model_name})"
@@ -951,13 +990,17 @@ big_image.jpg
             # 根据模式选择正确的模型名称进行验证
             if self.dual_model_mode:
                 current_model_name = self.vision_model_name
+                if not current_model_name:
+                    return {"success": False, "error": "❌ 错误：视觉模型未配置。请在 llm-filemgr.json 中配置 vision_model。"}
             else:
                 current_model_name = self.model_name
+                if not current_model_name:
+                    return {"success": False, "error": "❌ 错误：模型未配置。请在 llm-filemgr.json 中配置模型。"}
                 
             current_model_supports_vision = any(vision_model in current_model_name.lower() for vision_model in vision_models)
             
             if not current_model_supports_vision:
-                return {"success": False, "error": f"当前视觉模型 '{current_model_name}' 不支持图片分析。请使用支持视觉的模型，如 qwen2.5vl:7b"}
+                return {"success": False, "error": f"❌ 错误：当前视觉模型 '{current_model_name}' 不支持图片分析。请使用支持视觉的模型，如 qwen2.5vl:7b, llava, bakllava 等。"}
             
             # 构建AI分析提示
             if prompt:
@@ -1220,12 +1263,8 @@ big_image.jpg
         """运行AI Agent主循环，支持自动多轮命令执行，AI可根据上次执行结果继续生成命令，遇到{"action": "done"}时终止。"""
         import sys
         
-        print("🤖 增强版文件管理AI Agent已启动")
-        print(f"📁 当前工作目录: {self.work_directory}")
-        print(f"🧠 使用模型: {self.model_name}")
-        print("💡 输入 'exit' 或 'quit' 退出程序")
-        print("🔄 支持切换目录和各种文件管理操作")
-        print("🎬 支持媒体文件处理（需提前安装ffmpeg并配置PATH）")
+
+        print("输入 'exit' 或 'quit' 退出程序")
         print("=" * 80)
 
         import os

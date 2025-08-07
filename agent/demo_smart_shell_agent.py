@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-文件管理AI Agent演示脚本
+Smart Shell 演示脚本
 展示新增的两个功能：
 1. 支持切换当前目录
 2. 将命令输出结果传给大模型，辅助后续操作
@@ -9,7 +9,7 @@
 import os
 import tempfile
 from pathlib import Path
-from file_manager_agent import FileManagerAgent
+from smart_shell_agent import SmartShellAgent
 
 def create_demo_structure():
     """创建演示用的文件结构"""
@@ -44,7 +44,7 @@ def demo_directory_switching():
     demo_dir = create_demo_structure()
     
     # 创建AI Agent并设置工作目录
-    agent = FileManagerAgent(model_name="gemma3:4b", work_directory=str(demo_dir))
+    agent = SmartShellAgent(model_name="gemma3:4b", work_directory=str(demo_dir))
     
     print("\n📋 演示场景：")
     print("1. 查看当前目录内容")
@@ -75,7 +75,7 @@ def demo_result_feedback():
     print("="*60)
     
     demo_dir = create_demo_structure()
-    agent = FileManagerAgent(model_name="gemma3:4b", work_directory=str(demo_dir))
+    agent = SmartShellAgent(model_name="gemma3:4b", work_directory=str(demo_dir))
     
     print("\n📋 演示场景：")
     print("1. 列出目录内容")
@@ -112,7 +112,7 @@ def demo_result_feedback():
             
             # 简化建议，避免CPU过载
             if result.get("success"):
-                print(f"💡 提示: 操作已完成，您可以继续其他文件管理操作")
+                print(f"💡 提示: 操作已完成，您可以继续其他操作")
     
     return agent
 
@@ -123,7 +123,7 @@ def interactive_demo():
     print("="*60)
     
     demo_dir = create_demo_structure()
-    agent = FileManagerAgent(model_name="gemma3:4b", work_directory=str(demo_dir))
+    agent = SmartShellAgent(model_name="gemma3:4b", work_directory=str(demo_dir))
     
     print(f"\n📁 演示环境: {demo_dir}")
     print("💡 试试这些命令：")
@@ -166,7 +166,7 @@ def interactive_demo():
                 
                 # 简化建议，避免CPU过载
                 if result.get("success"):
-                    print(f"💡 提示: 操作已完成，您可以继续其他文件管理操作")
+                    print(f"💡 提示: 操作已完成，您可以继续其他Smart Shell操作")
                         
         except KeyboardInterrupt:
             print("\n👋 演示已中断！")
@@ -176,7 +176,7 @@ def interactive_demo():
 
 def main():
     """主函数"""
-    print("🚀 文件管理AI Agent功能演示")
+    print("🚀 Smart Shell 功能演示")
     print("展示两个新功能：")
     print("1. 支持切换当前目录")
     print("2. 将命令输出结果传给大模型，辅助后续操作")
