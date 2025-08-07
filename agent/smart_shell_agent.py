@@ -1085,9 +1085,7 @@ big_image.jpg
             path = params.get("path", "")
             result = self.action_change_directory(path)
 
-            if result["success"]:
-                print(f"✅ {result['message']}")
-            else:
+            if not result["success"]:
                 print(f"❌ {result['error']}")
 
             return result
@@ -1324,9 +1322,7 @@ big_image.jpg
                         if user_input.lower().startswith('cd '):
                             path = user_input[3:].strip()
                             result = self.action_change_directory(path)
-                            if result["success"]:
-                                print(f"✅ {result['message']}")
-                            else:
+                            if not result["success"]:
                                 print(f"❌ {result['error']}")
                         else:
                             # 其它命令直接用subprocess，继承当前终端

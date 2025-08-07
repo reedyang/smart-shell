@@ -96,8 +96,8 @@ smart-shell/
 ```
 
 ## 🔧 配置
-
-### 双模型配置（推荐）
+- 必须配置normal_model
+- 可选配置vision_model以支持图片解析
 
 创建 `smart-shell-config.json` 配置文件，支持为不同任务配置不同的AI模型：
 
@@ -114,8 +114,6 @@ smart-shell/
   "vision_model": {
     "provider": "ollama",
     "params": {
-      "api_key": "",
-      "base_url": "http://localhost:11434",
       "model": "qwen2.5vl:7b"
     }
   }
@@ -127,19 +125,6 @@ smart-shell/
 - `vision_model`: 用于图像处理的视觉模型（需要支持视觉功能）
 - `provider`: 支持 `ollama`、`openai`、`openwebui`
 - `params`: 包含API密钥、基础URL和模型名称
-
-### 单模型配置（兼容模式）
-
-程序也支持传统的单模型配置：
-
-```json
-{
-  "provider": "ollama",
-  "params": {
-    "model": "gemma3:4b"
-  }
-}
-```
 
 ### 媒体处理配置
 
@@ -181,25 +166,6 @@ brew install ffmpeg      # macOS
 - 确保配置文件格式正确（JSON格式）
 - 检查API密钥和URL是否正确
 - 对于Ollama模型，确保模型已下载并可用
-
-## 📝 更新日志
-
-### v2.1.0
-- ✅ 新增双模型配置支持
-- ✅ 普通任务和图像处理可使用不同模型
-- ✅ 向后兼容单模型配置
-- ✅ 改进模型验证和错误处理
-
-### v2.0.0
-- ✅ 使用 `prompt_toolkit` 重新实现Windows Tab补全
-- ✅ 解决所有显示问题和视觉干扰
-- ✅ 提供稳定的用户体验
-- ✅ 支持历史记录和光标导航
-
-### v1.0.0
-- 🎉 初始版本发布
-- 🤖 基础AI智能Shell功能
-- 📁 文件操作支持
 
 ## 🤝 贡献
 
