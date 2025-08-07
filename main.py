@@ -3,8 +3,8 @@
 文件管理AI Agent主启动脚本
 
 用法：
-    python main.py       # 使用默认AI模型
-    python main.py model # 使用指定的AI模型
+    python main.py       # 使用配置文件中的双模型配置
+    python main.py model # 使用指定的AI模型（兼容旧格式）
 """
 
 import sys
@@ -30,6 +30,8 @@ def main():
         provider = "ollama"
         params = None
         config = None
+        normal_config = None
+        multimodal_config = None
     else:
         config = None
         config_path = None
@@ -48,19 +50,52 @@ def main():
             except Exception as e:
                 print(f"⚠️ 配置文件读取失败: {e}")
                 config = None
-        # 默认模型
-        model_name = "gemma3:4b"
-        provider = "ollama"
-        params = None
+        
+        # 解析新的双模型配置
+        normal_config = None
+        multimodal_config = None
         if config:
-            provider = config.get("provider", "ollama").lower()
-            params = config.get("params")
-            if provider in ("openai", "openwebui") and params:
-                model_name = params.get("model", "gpt-3.5-turbo")
-            elif provider == "ollama":
-                pass
+            # 检查是否为新的双模型配置格式
+            if "normal_model" in config and "vision_model" in config:
+                print("📋 检测到双模型配置格式")
+                normal_config = config.get("normal_model", {})
+                vision_config = config.get("vision_model", {})
+                print(f"🤖 普通任务模型: {normal_config.get('provider', 'unknown')} - {normal_config.get('params', {}).get('model', 'unknown')}")
+                print(f"🖼️ 视觉模型: {vision_config.get('provider', 'unknown')} - {vision_config.get('params', {}).get('model', 'unknown')}")
+            else:
+                # 兼容旧格式
+                print("📋 使用兼容模式（单模型配置）")
+                provider = config.get("provider", "ollama").lower()
+                params = config.get("params")
+                if provider in ("openai", "openwebui") and params:
+                    model_name = params.get("model", "gpt-3.5-turbo")
+                elif provider == "ollama":
+                    model_name = params.get("model", "gemma3:4b") if params else "gemma3:4b"
+                else:
+                    model_name = "gemma3:4b"
+                    provider = "ollama"
+                    params = None
+        else:
+            # 默认配置
+            model_name = "gemma3:4b"
+            provider = "ollama"
+            params = None
 
-    # 选择模型提供方
+    # 如果使用双模型配置
+    if normal_config and vision_config:
+        try:
+            agent = FileManagerAgent(
+                work_directory=work_directory,
+                normal_config=normal_config,
+                vision_config=vision_config
+            )
+            agent.run()
+            return 0
+        except Exception as e:
+            print(f"❌ 双模型配置运行错误: {str(e)}")
+            return 1
+    
+    # 兼容旧格式的单模型配置
     if provider == "openai" and params:
         print(f"🤖 使用OpenAI API: {params.get('base_url', 'https://api.openai.com/v1')} 模型: {model_name}")
         try:

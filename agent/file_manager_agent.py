@@ -30,30 +30,63 @@ else:
         INPUT_HANDLER_TYPE = "none"
 
 class FileManagerAgent:
-    def __init__(self, model_name: str = "gemma3:4b", work_directory: Optional[str] = None, provider: str = "ollama", openai_conf: Optional[dict] = None, openwebui_conf: Optional[dict] = None, params: Optional[dict] = None):
+    def __init__(self, model_name: str = "gemma3:4b", work_directory: Optional[str] = None, provider: str = "ollama", openai_conf: Optional[dict] = None, openwebui_conf: Optional[dict] = None, params: Optional[dict] = None, normal_config: Optional[dict] = None, vision_config: Optional[dict] = None):
         """
         初始化文件管理AI Agent
         Args:
-            model_name: 模型名称
+            model_name: 模型名称（兼容旧格式）
             work_directory: 工作目录
-            provider: 模型服务提供方
-            openai_conf: openai参数
-            openwebui_conf: openwebui参数
-            params: 通用参数
+            provider: 模型服务提供方（兼容旧格式）
+            openai_conf: openai参数（兼容旧格式）
+            openwebui_conf: openwebui参数（兼容旧格式）
+            params: 通用参数（兼容旧格式）
+            normal_config: 普通任务模型配置（新格式）
+            vision_config: 视觉模型配置（新格式）
         """
-        self.model_name = model_name
         self.work_directory = Path(work_directory) if work_directory else Path.cwd()
         self.conversation_history = []
         self.operation_results = []
-        self.provider = provider
-        self.openai_conf = openai_conf
-        self.openwebui_conf = openwebui_conf
-        self.params = params
-        # 兼容params统一配置
-        if self.provider == 'openai' and self.openai_conf is None and params is not None:
-            self.openai_conf = params
-        if self.provider == 'openwebui' and self.openwebui_conf is None and params is not None:
-            self.openwebui_conf = params
+        
+        # 支持新的双模型配置
+        if normal_config and vision_config:
+            self.dual_model_mode = True
+            self.normal_config = normal_config
+            self.vision_config = vision_config
+            
+            # 设置普通任务模型
+            self.normal_provider = normal_config.get("provider", "ollama")
+            self.normal_params = normal_config.get("params", {})
+            self.normal_model_name = self.normal_params.get("model", "gemma3:4b")
+            
+            # 设置视觉模型
+            self.vision_provider = vision_config.get("provider", "ollama")
+            self.vision_params = vision_config.get("params", {})
+            self.vision_model_name = self.vision_params.get("model", "qwen2.5vl:7b")
+            
+            # 兼容旧接口
+            self.model_name = self.normal_model_name
+            self.provider = self.normal_provider
+            self.params = self.normal_params
+            self.openai_conf = self.normal_params if self.normal_provider == "openai" else None
+            self.openwebui_conf = self.normal_params if self.normal_provider == "openwebui" else None
+            
+            print(f"🤖 双模型模式已启用")
+            print(f"   📝 普通任务: {self.normal_provider} - {self.normal_model_name}")
+            print(f"   🖼️ 视觉模型: {self.vision_provider} - {self.vision_model_name}")
+        else:
+            # 兼容旧格式
+            self.dual_model_mode = False
+            self.model_name = model_name
+            self.provider = provider
+            self.openai_conf = openai_conf
+            self.openwebui_conf = openwebui_conf
+            self.params = params
+            # 兼容params统一配置
+            if self.provider == 'openai' and self.openai_conf is None and params is not None:
+                self.openai_conf = params
+            if self.provider == 'openwebui' and self.openwebui_conf is None and params is not None:
+                self.openwebui_conf = params
+        
         self._validate_model()
         
         # 系统提示词
@@ -80,7 +113,17 @@ class FileManagerAgent:
     
     def _validate_model(self):
         """验证模型是否可用（仅ollama模式）"""
-        if self.provider != "ollama":
+        if self.dual_model_mode:
+            # 双模型模式：验证两个模型
+            self._validate_single_model(self.normal_provider, self.normal_model_name, "普通任务模型")
+            self._validate_single_model(self.vision_provider, self.vision_model_name, "视觉模型")
+        else:
+            # 单模型模式：验证单个模型
+            self._validate_single_model(self.provider, self.model_name, "模型")
+    
+    def _validate_single_model(self, provider: str, model_name: str, model_type: str):
+        """验证单个模型是否可用"""
+        if provider != "ollama":
             return
         try:
             import ollama
@@ -93,13 +136,13 @@ class FileManagerAgent:
                     available_models.append(model.get('name', model.get('model', 'unknown')))
                 else:
                     available_models.append(str(model))
-            if self.model_name not in available_models:
-                print(f"⚠️ 警告: 模型 '{self.model_name}' 不在可用模型列表中")
+            if model_name not in available_models:
+                print(f"⚠️ 警告: {model_type} '{model_name}' 不在可用模型列表中")
                 print(f"📋 可用模型: {available_models}")
                 if available_models:
                     print(f"💡 建议使用: {available_models[0]}")
         except Exception as e:
-            print(f"⚠️ 无法验证模型: {e}")
+            print(f"⚠️ 验证{model_type}时出错: {e}")
 
     def call_ai(self, user_input: str, context: str = "", stream: bool = False):
         """调用大模型API获取AI回复，支持流式输出。stream=True时返回生成器"""
@@ -118,13 +161,28 @@ class FileManagerAgent:
             current_input += f"用户输入: {user_input}"
             messages.append({"role": "user", "content": current_input})
 
-            if self.provider == "openai" and self.openai_conf:
+            # 根据模式选择模型配置
+            if self.dual_model_mode:
+                # 双模型模式：使用普通任务模型
+                provider = self.normal_provider
+                model_name = self.normal_model_name
+                params = self.normal_params
+                openai_conf = params if provider == "openai" else None
+                openwebui_conf = params if provider == "openwebui" else None
+            else:
+                # 单模型模式：使用原有配置
+                provider = self.provider
+                model_name = self.model_name
+                openai_conf = self.openai_conf
+                openwebui_conf = self.openwebui_conf
+
+            if provider == "openai" and openai_conf:
                 import requests
                 import urllib3
                 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-                api_key = self.openai_conf.get("api_key")
-                base_url = self.openai_conf.get("base_url", "https://api.openai.com/v1")
-                model = self.model_name
+                api_key = openai_conf.get("api_key")
+                base_url = openai_conf.get("base_url", "https://api.openai.com/v1")
+                model = model_name
                 url = base_url.rstrip("/") + "/chat/completions"
                 headers = {
                     "Authorization": f"Bearer {api_key}",
@@ -163,13 +221,13 @@ class FileManagerAgent:
                     self.conversation_history.append({"role": "user", "content": user_input})
                     self.conversation_history.append({"role": "assistant", "content": ai_response})
                     return ai_response
-            elif self.provider == "openwebui" and self.openwebui_conf:
+            elif provider == "openwebui" and openwebui_conf:
                 import requests
                 import urllib3
                 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-                api_key = self.openwebui_conf.get("api_key")
-                base_url = self.openwebui_conf.get("base_url", "http://localhost:8080/v1")
-                model = self.model_name
+                api_key = openwebui_conf.get("api_key")
+                base_url = openwebui_conf.get("base_url", "http://localhost:8080/v1")
+                model = model_name
                 url = base_url.rstrip("/") + "/chat/completions"
                 headers = {
                     "Authorization": f"Bearer {api_key}",
@@ -211,7 +269,7 @@ class FileManagerAgent:
                 import ollama
                 if stream:
                     response = ollama.chat(
-                        model=self.model_name,
+                        model=model_name,
                         messages=messages,
                         stream=True
                     )
@@ -227,7 +285,7 @@ class FileManagerAgent:
                     return gen()
                 else:
                     response = ollama.chat(
-                        model=self.model_name,
+                        model=model_name,
                         messages=messages,
                         stream=False
                     )
@@ -236,7 +294,81 @@ class FileManagerAgent:
                     self.conversation_history.append({"role": "assistant", "content": ai_response})
                     return ai_response
         except Exception as e:
-            error_msg = f"调用大模型API时出错: {str(e)} (provider: {self.provider}, model: {self.model_name})"
+            error_msg = f"调用大模型API时出错: {str(e)} (provider: {provider}, model: {model_name})"
+            return error_msg
+
+    def call_ai_multimodal(self, user_input: str, image_path: str, context: str = "", stream: bool = False):
+        """调用支持多模态的大模型API进行图片分析，支持流式输出"""
+        try:
+            import os
+            import base64
+            os_info = os.uname() if hasattr(os, 'uname') else os.name
+            
+            # 读取并编码图片
+            with open(image_path, 'rb') as image_file:
+                image_data = base64.b64encode(image_file.read()).decode('utf-8')
+            
+            # 构建多模态消息 - 使用简化的系统提示，避免生成JSON命令
+            system_prompt = """你是一个图片分析助手。请直接分析用户提供的图片，描述图片中的内容、物体、场景、文字等信息。不要生成任何JSON命令或代码，只提供自然语言的分析结果。"""
+            
+            messages = [{"role": "system", "content": system_prompt}]
+            
+            # 添加包含图片的消息 - 使用正确的Ollama格式
+            messages.append({
+                "role": "user", 
+                "content": user_input,
+                "images": [image_data]
+            })
+
+            # 根据模式选择模型配置
+            if self.dual_model_mode:
+                # 双模型模式：使用视觉模型
+                provider = self.vision_provider
+                model_name = self.vision_model_name
+                params = self.vision_params
+                openai_conf = params if provider == "openai" else None
+                openwebui_conf = params if provider == "openwebui" else None
+            else:
+                # 单模型模式：使用原有配置
+                provider = self.provider
+                model_name = self.model_name
+                openai_conf = self.openai_conf
+                openwebui_conf = self.openwebui_conf
+
+            if provider == "ollama":
+                import ollama
+                if stream:
+                    response = ollama.chat(
+                        model=model_name,
+                        messages=messages,
+                        stream=True
+                    )
+                    def gen():
+                        buffer = ""
+                        for chunk in response:
+                            delta = chunk.get("message", {}).get("content", "")
+                            if delta:
+                                buffer += delta
+                                yield delta
+                        self.conversation_history.append({"role": "user", "content": user_input})
+                        self.conversation_history.append({"role": "assistant", "content": buffer})
+                    return gen()
+                else:
+                    response = ollama.chat(
+                        model=model_name,
+                        messages=messages,
+                        stream=False
+                    )
+                    ai_response = response['message']['content']
+                    self.conversation_history.append({"role": "user", "content": user_input})
+                    self.conversation_history.append({"role": "assistant", "content": ai_response})
+                    return ai_response
+            else:
+                # 对于不支持多模态的提供者，回退到文本模式
+                return self.call_ai(user_input, context, stream)
+                
+        except Exception as e:
+            error_msg = f"调用多模态大模型API时出错: {str(e)} (provider: {provider}, model: {model_name})"
             return error_msg
 
     def extract_json_command(self, text: str) -> Optional[Dict]:
@@ -792,6 +924,63 @@ big_image.jpg
         except Exception as e:
             return {"success": False, "error": f"读取文件失败: {str(e)}"}
 
+    def action_analyze_image(self, file_path: str, prompt: str = "") -> dict:
+        """解读图片内容，使用AI分析图片中的文字、物体、场景等信息"""
+        try:
+            abs_path = Path(file_path)
+            if not abs_path.is_absolute():
+                abs_path = self.work_directory / file_path
+            if not abs_path.exists():
+                return {"success": False, "error": f"图片文件 '{file_path}' 不存在"}
+            if not abs_path.is_file():
+                return {"success": False, "error": f"'{file_path}' 不是一个文件"}
+            
+            # 检查文件扩展名
+            image_exts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif']
+            if abs_path.suffix.lower() not in image_exts:
+                return {"success": False, "error": f"不支持的文件格式 '{abs_path.suffix}'，支持的格式: {', '.join(image_exts)}"}
+            
+            # 检查文件大小（限制为10MB）
+            stat = abs_path.stat()
+            if stat.st_size > 10 * 1024 * 1024:
+                return {"success": False, "error": "图片文件过大，请使用小于10MB的图片"}
+            
+            # 检查模型是否支持视觉功能
+            vision_models = ['qwen2.5vl', 'llava', 'bakllava', 'llava-llama3', 'llava-v1.6']
+            
+            # 根据模式选择正确的模型名称进行验证
+            if self.dual_model_mode:
+                current_model_name = self.vision_model_name
+            else:
+                current_model_name = self.model_name
+                
+            current_model_supports_vision = any(vision_model in current_model_name.lower() for vision_model in vision_models)
+            
+            if not current_model_supports_vision:
+                return {"success": False, "error": f"当前视觉模型 '{current_model_name}' 不支持图片分析。请使用支持视觉的模型，如 qwen2.5vl:7b"}
+            
+            # 构建AI分析提示
+            if prompt:
+                ai_prompt = f"请分析这张图片：{prompt}"
+            else:
+                ai_prompt = f"请详细分析这张图片的内容，包括：\n1. 图片中的主要物体和场景\n2. 文字内容（如果有）\n3. 颜色和构图特点\n4. 图片的整体主题和用途"
+            
+            # 调用AI进行分析
+            print(f"🖼️ 正在使用视觉模型分析图片: {abs_path.name}")
+            analysis = self.call_ai_multimodal(ai_prompt, str(abs_path))
+            
+            return {
+                "success": True, 
+                "file": str(abs_path),
+                "analysis": analysis,
+                "file_size": stat.st_size,
+                "prompt": prompt,
+                "model": current_model_name
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": f"图片分析失败: {str(e)}"}
+
     def execute_command(self, command: Dict) -> Dict[str, Any]:
         """执行AI生成的命令，支持批量命令和cls命令"""
         print(f"🔍 正在执行命令: {command}")
@@ -1006,6 +1195,23 @@ big_image.jpg
                 return result
             else:
                 print("❌ read命令缺少path参数")
+                return {"success": False, "error": "缺少path参数"}
+        
+        elif action == "analyze_image":
+            file_path = params.get("path")
+            prompt = params.get("prompt", "")
+            if file_path:
+                result = self.action_analyze_image(file_path, prompt)
+                if result["success"]:
+                    print(f"\n🖼️ 图片分析结果 ({result['file']}):")
+                    print("=" * 60)
+                    print(result["analysis"])
+                    print("=" * 60)
+                else:
+                    print(f"❌ {result['error']}")
+                return result
+            else:
+                print("❌ analyze_image命令缺少path参数")
                 return {"success": False, "error": "缺少path参数"}
 
         return {"success": False, "error": "未知的操作类型"}
