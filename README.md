@@ -79,6 +79,8 @@ python main.py
 👤 [当前目录]: 将video.avi转换为MP4格式
 👤 [当前目录]: 分析这张图片的内容
 👤 [当前目录]: 切换到上级目录
+👤 [当前目录]: 创建一个名为测试文件夹的目录
+👤 [当前目录]: 分析这张图片中的文字内容
 ```
 
 ## 📁 项目结构
@@ -141,6 +143,23 @@ brew install ffmpeg      # macOS
 ```
 
 ## 🐛 故障排除
+
+### 中文输入问题
+
+如果遇到中文输入问题：
+
+1. **确保安装了prompt_toolkit**
+   ```bash
+   pip install prompt_toolkit
+   ```
+
+2. **运行测试脚本验证功能**
+   ```bash
+   python quick_test.py
+   ```
+
+3. **检查终端编码设置**
+   确保终端设置为UTF-8编码
 
 ### Tab补全问题
 

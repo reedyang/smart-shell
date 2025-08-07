@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Windows兼容的输入处理模块
-使用prompt_toolkit库实现稳定的Tab补全功能
+使用prompt_toolkit库实现稳定的Tab补全功能和中文输入支持
 """
 
 import os
@@ -13,6 +13,8 @@ try:
     from prompt_toolkit import PromptSession
     from prompt_toolkit.completion import Completer, Completion
     from prompt_toolkit.history import InMemoryHistory
+    from prompt_toolkit.formatted_text import FormattedText
+    from prompt_toolkit.styles import Style
     PROMPT_TOOLKIT_AVAILABLE = True
 except ImportError:
     PROMPT_TOOLKIT_AVAILABLE = False
@@ -213,7 +215,7 @@ class FileCompleter(Completer):
 
 
 class WindowsInputHandler:
-    """Windows输入处理器，使用prompt_toolkit实现Tab补全"""
+    """Windows输入处理器，使用prompt_toolkit实现Tab补全和中文输入支持"""
     
     def __init__(self, work_directory: Path):
         """
@@ -228,7 +230,10 @@ class WindowsInputHandler:
             # 使用prompt_toolkit
             self.completer = FileCompleter(work_directory)
             self.session = PromptSession(
-                completer=self.completer
+                completer=self.completer,
+                enable_system_prompt=True,
+                enable_suspend=True,
+                complete_in_thread=True
             )
         else:
             # 回退到标准input

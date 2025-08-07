@@ -1581,6 +1581,8 @@ big_image.jpg
                         for chunk in stream_gen:
                             print(chunk, end="", flush=True)
                             ai_response += chunk
+                        # AI输出完成后添加换行符
+                        print()
                     except Exception as e:
                         print(f"\n❌ AI流式输出异常: {e}")
                     # 提取并执行命令
@@ -1591,7 +1593,7 @@ big_image.jpg
                     if command.get("action") == "done":
                         print("✅ AI已声明所有操作完成。");
                         break
-                    print("\n⚡ 执行操作...")
+                    print("⚡ 执行操作...")
                     result = self.execute_command(command)
                     # 保存操作结果
                     self.operation_results.append({
@@ -1660,96 +1662,69 @@ big_image.jpg
             用户输入的字符串
         """
         import sys
-        import msvcrt
         import platform
         
         prompt = f"👤 [{str(self.work_directory)}]: "
-        current_input = ""
-        cursor_position = 0
         
         # 重置历史记录索引
         self.history_manager.reset_index()
         
-        def clear_line():
-            """清空当前行"""
-            # 移动到行首
-            sys.stdout.write('\r')
-            # 使用ANSI转义序列清空从光标到行尾的内容
-            sys.stdout.write('\033[K')
-            # 备用方案：如果ANSI不支持，用空格覆盖
-            # 使用适中的长度，既能清除残影又不会产生空行
-            backup_length = len(prompt) + len(current_input) + 20
-            sys.stdout.write(' ' * backup_length)
-            sys.stdout.write('\r')
-            sys.stdout.flush()
-        
-        while True:
-            # 显示当前输入
-            # 移动到行首并显示完整内容
-            sys.stdout.write('\r' + prompt + current_input)
-            # 清空后面的残影
-            sys.stdout.write('\033[K')
-            # 如果光标不在末尾，移动到正确位置
-            if cursor_position < len(current_input):
-                # 使用ANSI转义序列向左移动光标
-                move_left = len(current_input) - cursor_position
-                sys.stdout.write(f'\033[{move_left}D')
-            sys.stdout.flush()
-            
-            # 获取按键
-            if platform.system() == "Windows":
+        # 在Windows系统上，优先使用prompt_toolkit以获得更好的中文输入支持
+        if platform.system() == "Windows":
+            try:
+                # 尝试使用prompt_toolkit
+                from prompt_toolkit import PromptSession
+                from prompt_toolkit.history import InMemoryHistory
+                
+                # 创建历史记录
+                history = InMemoryHistory()
+                for entry in self.history_manager.get_all_history():
+                    history.append_string(entry)
+                
+                # 创建会话
+                session = PromptSession(history=history)
+                
+                # 获取用户输入
+                user_input = session.prompt(prompt).strip()
+                
+                # 保存到历史记录
+                if user_input:
+                    self.history_manager.add_entry(user_input)
+                
+                return user_input
+                
+            except ImportError:
+                # 如果没有prompt_toolkit，回退到标准input
+                print("⚠️ 提示：安装 prompt_toolkit 可获得更好的输入体验：pip install prompt_toolkit")
                 try:
-                    key = msvcrt.getch()
-                    if key == b'\r':  # Enter键
-                        print()  # 换行
-                        return current_input.strip()
-                    elif key == b'\x08':  # Backspace键
-                        if cursor_position > 0:
-                            current_input = current_input[:cursor_position-1] + current_input[cursor_position:]
-                            cursor_position -= 1
-                    elif key == b'\xe0':  # 特殊键前缀
-                        key2 = msvcrt.getch()
-                        if key2 == b'H':  # 上箭头键
-                            # 获取上一条历史记录
-                            prev_history = self.history_manager.get_previous()
-                            if prev_history:
-                                current_input = prev_history
-                                cursor_position = len(current_input)
-                        elif key2 == b'P':  # 下箭头键
-                            # 获取下一条历史记录
-                            next_history = self.history_manager.get_next()
-                            if next_history:
-                                current_input = next_history
-                                cursor_position = len(current_input)
-                            else:
-                                current_input = ""
-                                cursor_position = 0
-                        elif key2 == b'K':  # 左箭头键
-                            # 向左移动光标
-                            if cursor_position > 0:
-                                cursor_position -= 1
-                        elif key2 == b'M':  # 右箭头键
-                            # 向右移动光标
-                            if cursor_position < len(current_input):
-                                cursor_position += 1
-                        elif key2 == b'\x1b':  # Escape键
-                            print()  # 换行
-                            return ""
-                    elif key >= b' ' and key <= b'~':  # 可打印字符
-                        char = key.decode('utf-8', errors='ignore')
-                        current_input = current_input[:cursor_position] + char + current_input[cursor_position:]
-                        cursor_position += 1
+                    user_input = input(prompt).strip()
+                    if user_input:
+                        self.history_manager.add_entry(user_input)
+                    return user_input
                 except KeyboardInterrupt:
                     print("\n👋 程序已中断，再见！")
                     sys.exit(0)
-            else:
-                # 非Windows系统使用简单的input
+            except Exception as e:
+                # 如果prompt_toolkit出错，回退到标准input
+                print(f"⚠️ prompt_toolkit 出错，回退到标准输入: {e}")
                 try:
-                    user_input = input(prompt)
-                    return user_input.strip()
+                    user_input = input(prompt).strip()
+                    if user_input:
+                        self.history_manager.add_entry(user_input)
+                    return user_input
                 except KeyboardInterrupt:
                     print("\n👋 程序已中断，再见！")
                     sys.exit(0)
+        else:
+            # 非Windows系统使用简单的input
+            try:
+                user_input = input(prompt).strip()
+                if user_input:
+                    self.history_manager.add_entry(user_input)
+                return user_input
+            except KeyboardInterrupt:
+                print("\n👋 程序已中断，再见！")
+                sys.exit(0)
     
     def _execute_file_directly(self, user_input: str) -> bool:
         """
