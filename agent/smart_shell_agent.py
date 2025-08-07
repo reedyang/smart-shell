@@ -993,7 +993,7 @@ big_image.jpg
             return {"success": False, "error": f"图片分析失败: {str(e)}"}
 
     def action_git(self, command: str, args: Optional[str] = None) -> dict:
-        """执行Git命令，支持所有Git操作"""
+        """执行Git命令，支持所有Git操作，写操作需要用户确认"""
         try:
             import subprocess
             import sys
@@ -1004,12 +1004,35 @@ big_image.jpg
             else:
                 full_command = f"git {command}"
             
+            # 检查是否为写操作，需要用户确认
+            write_commands = [
+                'add', 'commit', 'push', 'pull', 'merge', 'rebase', 'reset', 
+                'checkout', 'branch', 'tag', 'remote', 'fetch', 'clone', 'init',
+                'stash', 'cherry-pick', 'revert', 'clean', 'rm', 'mv'
+            ]
+            
+            is_write_operation = command.lower() in write_commands
+            
+            if is_write_operation:
+                # 显示将要执行的命令并请求用户确认
+                print(f"⚠️ 即将执行Git写操作: {full_command}")
+                confirm = input("确认执行此Git命令吗？(y/n): ")
+                if confirm.lower() != 'y':
+                    return {
+                        "success": False, 
+                        "command": full_command,
+                        "error": "用户取消了Git写操作",
+                        "message": "Git命令已取消"
+                    }
+            
             # 检查是否在Git仓库中
             try:
                 result = subprocess.run(
                     ["git", "rev-parse", "--git-dir"],
                     capture_output=True,
                     text=True,
+                    encoding='utf-8',
+                    errors='replace',
                     cwd=str(self.work_directory),
                     timeout=10
                 )
@@ -1020,7 +1043,7 @@ big_image.jpg
             except FileNotFoundError:
                 return {"success": False, "error": "Git未安装或不在PATH中"}
             
-            # 执行Git命令
+            # 执行Git命令，使用UTF-8编码并处理编码错误
             process = subprocess.Popen(
                 full_command,
                 shell=True,
@@ -1028,6 +1051,8 @@ big_image.jpg
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                encoding='utf-8',
+                errors='replace',
                 cwd=str(self.work_directory)
             )
             
@@ -1051,6 +1076,109 @@ big_image.jpg
                 
         except Exception as e:
             return {"success": False, "error": f"Git命令执行异常: {str(e)}"}
+
+    def action_diff(self, file1: str, file2: str, options: Optional[str] = None) -> dict:
+        """跨平台文件比较：Windows上优先使用diff.exe，否则使用fc命令；其他平台使用diff命令"""
+        try:
+            import subprocess
+            import sys
+            import os
+            import shutil
+            import platform
+            from pathlib import Path
+            
+            # 检查文件是否存在
+            file1_path = Path(file1)
+            file2_path = Path(file2)
+            
+            if not file1_path.exists():
+                return {"success": False, "error": f"文件不存在: {file1}"}
+            if not file2_path.exists():
+                return {"success": False, "error": f"文件不存在: {file2}"}
+            
+            # 根据操作系统选择合适的比较命令
+            if platform.system() == "Windows":
+                # Windows平台：优先使用diff.exe，否则使用fc命令
+                if shutil.which("diff.exe"):
+                    # 使用diff.exe
+                    if options:
+                        full_command = f"diff.exe {options} \"{file1}\" \"{file2}\""
+                    else:
+                        full_command = f"diff.exe \"{file1}\" \"{file2}\""
+                    command_type = "diff.exe"
+                else:
+                    # 使用fc命令
+                    if options:
+                        full_command = f"cmd /c fc {options} \"{file1}\" \"{file2}\""
+                    else:
+                        full_command = f"cmd /c fc \"{file1}\" \"{file2}\""
+                    command_type = "fc"
+            else:
+                # 其他平台：使用diff命令
+                if options:
+                    full_command = f"diff {options} \"{file1}\" \"{file2}\""
+                else:
+                    full_command = f"diff \"{file1}\" \"{file2}\""
+                command_type = "diff"
+            
+            # 执行比较命令，使用UTF-8编码并处理编码错误
+            process = subprocess.Popen(
+                full_command,
+                shell=True,
+                stdin=sys.stdin,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+                cwd=str(self.work_directory)
+            )
+            
+            stdout, stderr = process.communicate()
+            return_code = process.returncode
+            
+            # 根据命令类型处理返回码
+            if command_type == "fc":
+                # fc命令的特殊处理：返回码1表示有差异，0表示无差异
+                if return_code in [0, 1]:
+                    return {
+                        "success": True, 
+                        "command": full_command,
+                        "command_type": command_type,
+                        "output": stdout.strip() if stdout else "",
+                        "has_differences": return_code == 1,
+                        "message": "文件比较完成" + ("，发现差异" if return_code == 1 else "，文件相同")
+                    }
+                else:
+                    return {
+                        "success": False, 
+                        "command": full_command,
+                        "command_type": command_type,
+                        "error": stderr.strip() if stderr else f"fc命令执行失败，退出码: {return_code}",
+                        "output": stdout.strip() if stdout else ""
+                    }
+            else:
+                # diff/diff.exe命令：返回码0表示无差异，1表示有差异，2表示错误
+                if return_code in [0, 1]:
+                    return {
+                        "success": True, 
+                        "command": full_command,
+                        "command_type": command_type,
+                        "output": stdout.strip() if stdout else "",
+                        "has_differences": return_code == 1,
+                        "message": "文件比较完成" + ("，发现差异" if return_code == 1 else "，文件相同")
+                    }
+                else:
+                    return {
+                        "success": False, 
+                        "command": full_command,
+                        "command_type": command_type,
+                        "error": stderr.strip() if stderr else f"{command_type}命令执行失败，退出码: {return_code}",
+                        "output": stdout.strip() if stdout else ""
+                    }
+                
+        except Exception as e:
+            return {"success": False, "error": f"文件比较命令执行异常: {str(e)}"}
 
     def execute_command(self, command: Dict) -> Dict[str, Any]:
         """执行AI生成的命令，支持批量命令和cls命令"""
@@ -1230,9 +1358,9 @@ big_image.jpg
             if shell_cmd:
                 result = self.action_shell_command(shell_cmd)
                 if result["success"]:
-                    print(f"\n💻 系统命令输出:\n{result['stdout']}")
+                    print(f"\n💻 系统命令执行成功: {result['message']}")
                 else:
-                    print(f"❌ 系统命令执行失败: {result.get('stderr', result.get('error', '未知错误'))}")
+                    print(f"❌ 系统命令执行失败: {result.get('error', '未知错误')}")
                 return result
             else:
                 print("❌ shell命令缺少command参数")
@@ -1294,7 +1422,11 @@ big_image.jpg
                         print("📤 输出:")
                         print(result["output"])
                 else:
-                    print(f"❌ Git命令执行失败: {result['error']}")
+                    # 检查是否为用户取消的情况
+                    if "用户取消了Git写操作" in result.get("error", ""):
+                        print(f"ℹ️ {result['message']}")
+                    else:
+                        print(f"❌ Git命令执行失败: {result['error']}")
                     if result.get("output"):
                         print("📤 输出:")
                         print(result["output"])
@@ -1302,6 +1434,29 @@ big_image.jpg
             else:
                 print("❌ git命令缺少command参数")
                 return {"success": False, "error": "缺少command参数"}
+
+        elif action == "diff":
+            file1 = params.get("file1")
+            file2 = params.get("file2")
+            options = params.get("options")
+            if file1 and file2:
+                result = self.action_diff(file1, file2, options)
+                if result["success"]:
+                    command_type = result.get("command_type", "unknown")
+                    print(f"\n🔍 文件比较完成 (使用 {command_type}): {result['command']}")
+                    print(f"📊 结果: {result['message']}")
+                    if result.get("output"):
+                        print("📤 差异详情:")
+                        print(result["output"])
+                else:
+                    print(f"❌ 文件比较失败: {result['error']}")
+                    if result.get("output"):
+                        print("📤 输出:")
+                        print(result["output"])
+                return result
+            else:
+                print("❌ diff命令缺少file1或file2参数")
+                return {"success": False, "error": "缺少file1或file2参数"}
 
         return {"success": False, "error": "未知的操作类型"}
 
