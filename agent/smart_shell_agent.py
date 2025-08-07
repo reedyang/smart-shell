@@ -964,7 +964,7 @@ big_image.jpg
             return {"success": False, "error": f"读取文件失败: {str(e)}"}
 
     def action_analyze_image(self, file_path: str, prompt: str = "") -> dict:
-        """解读图片内容，使用AI分析图片中的文字、物体、场景等信息"""
+        """分析图片内容，支持多种图片格式"""
         try:
             abs_path = Path(file_path)
             if not abs_path.is_absolute():
@@ -977,52 +977,80 @@ big_image.jpg
             # 检查文件扩展名
             image_exts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif']
             if abs_path.suffix.lower() not in image_exts:
-                return {"success": False, "error": f"不支持的文件格式 '{abs_path.suffix}'，支持的格式: {', '.join(image_exts)}"}
+                return {"success": False, "error": f"不支持的文件格式: {abs_path.suffix}"}
             
-            # 检查文件大小（限制为10MB）
-            stat = abs_path.stat()
-            if stat.st_size > 10 * 1024 * 1024:
-                return {"success": False, "error": "图片文件过大，请使用小于10MB的图片"}
-            
-            # 检查模型是否支持视觉功能
-            vision_models = ['qwen2.5vl', 'llava', 'bakllava', 'llava-llama3', 'llava-v1.6']
-            
-            # 根据模式选择正确的模型名称进行验证
-            if self.dual_model_mode:
-                current_model_name = self.vision_model_name
-                if not current_model_name:
-                    return {"success": False, "error": "❌ 错误：视觉模型未配置。请在 llm-filemgr.json 中配置 vision_model。"}
-            else:
-                current_model_name = self.model_name
-                if not current_model_name:
-                    return {"success": False, "error": "❌ 错误：模型未配置。请在 llm-filemgr.json 中配置模型。"}
-                
-            current_model_supports_vision = any(vision_model in current_model_name.lower() for vision_model in vision_models)
-            
-            if not current_model_supports_vision:
-                return {"success": False, "error": f"❌ 错误：当前视觉模型 '{current_model_name}' 不支持图片分析。请使用支持视觉的模型，如 qwen2.5vl:7b, llava, bakllava 等。"}
-            
-            # 构建AI分析提示
+            # 构建分析提示
             if prompt:
-                ai_prompt = f"请分析这张图片：{prompt}"
+                analysis_prompt = f"请分析这张图片：{prompt}\n\n图片路径：{str(abs_path)}"
             else:
-                ai_prompt = f"请详细分析这张图片的内容，包括：\n1. 图片中的主要物体和场景\n2. 文字内容（如果有）\n3. 颜色和构图特点\n4. 图片的整体主题和用途"
+                analysis_prompt = f"请详细描述这张图片的内容，包括：\n1. 图片中的主要物体和场景\n2. 颜色和构图\n3. 文字内容（如果有）\n4. 图片的整体风格和特点\n\n图片路径：{str(abs_path)}"
             
-            # 调用AI进行分析
-            print(f"🖼️ 正在使用视觉模型分析图片: {abs_path.name}")
-            analysis = self.call_ai_multimodal(ai_prompt, str(abs_path))
+            # 调用AI进行图片分析
+            analysis = self.call_ai_multimodal(analysis_prompt, str(abs_path))
             
-            return {
-                "success": True, 
-                "file": str(abs_path),
-                "analysis": analysis,
-                "file_size": stat.st_size,
-                "prompt": prompt,
-                "model": current_model_name
-            }
-            
+            return {"success": True, "analysis": analysis, "file": str(abs_path)}
         except Exception as e:
             return {"success": False, "error": f"图片分析失败: {str(e)}"}
+
+    def action_git(self, command: str, args: Optional[str] = None) -> dict:
+        """执行Git命令，支持所有Git操作"""
+        try:
+            import subprocess
+            import sys
+            
+            # 构建完整的Git命令
+            if args:
+                full_command = f"git {command} {args}"
+            else:
+                full_command = f"git {command}"
+            
+            # 检查是否在Git仓库中
+            try:
+                result = subprocess.run(
+                    ["git", "rev-parse", "--git-dir"],
+                    capture_output=True,
+                    text=True,
+                    cwd=str(self.work_directory),
+                    timeout=10
+                )
+                if result.returncode != 0:
+                    return {"success": False, "error": "当前目录不是Git仓库"}
+            except subprocess.TimeoutExpired:
+                return {"success": False, "error": "Git仓库检查超时"}
+            except FileNotFoundError:
+                return {"success": False, "error": "Git未安装或不在PATH中"}
+            
+            # 执行Git命令
+            process = subprocess.Popen(
+                full_command,
+                shell=True,
+                stdin=sys.stdin,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                cwd=str(self.work_directory)
+            )
+            
+            stdout, stderr = process.communicate()
+            return_code = process.returncode
+            
+            if return_code == 0:
+                return {
+                    "success": True, 
+                    "command": full_command,
+                    "output": stdout.strip() if stdout else "",
+                    "message": "Git命令执行成功"
+                }
+            else:
+                return {
+                    "success": False, 
+                    "command": full_command,
+                    "error": stderr.strip() if stderr else f"Git命令执行失败，退出码: {return_code}",
+                    "output": stdout.strip() if stdout else ""
+                }
+                
+        except Exception as e:
+            return {"success": False, "error": f"Git命令执行异常: {str(e)}"}
 
     def execute_command(self, command: Dict) -> Dict[str, Any]:
         """执行AI生成的命令，支持批量命令和cls命令"""
@@ -1254,6 +1282,26 @@ big_image.jpg
             else:
                 print("❌ analyze_image命令缺少path参数")
                 return {"success": False, "error": "缺少path参数"}
+
+        elif action == "git":
+            git_command = params.get("command")
+            git_args = params.get("args")
+            if git_command:
+                result = self.action_git(git_command, git_args)
+                if result["success"]:
+                    print(f"\n🔧 Git命令执行成功: {result['command']}")
+                    if result.get("output"):
+                        print("📤 输出:")
+                        print(result["output"])
+                else:
+                    print(f"❌ Git命令执行失败: {result['error']}")
+                    if result.get("output"):
+                        print("📤 输出:")
+                        print(result["output"])
+                return result
+            else:
+                print("❌ git命令缺少command参数")
+                return {"success": False, "error": "缺少command参数"}
 
         return {"success": False, "error": "未知的操作类型"}
 
