@@ -1287,9 +1287,9 @@ big_image.jpg
             try:
                 # 显示完整路径，使用tab补全
                 if self.input_handler:
-                    user_input = self.input_handler.get_input_with_completion(f"\n👤 [{str(self.work_directory)}]: ").strip()
+                    user_input = self.input_handler.get_input_with_completion(f"👤 [{str(self.work_directory)}]: ").strip()
                 else:
-                    user_input = input(f"\n👤 [{str(self.work_directory)}]: ").strip()
+                    user_input = input(f"👤 [{str(self.work_directory)}]: ").strip()
                 
                 if user_input.lower() in ['exit', 'quit', '退出']:
                     break
@@ -1360,7 +1360,6 @@ big_image.jpg
                             ai_response += chunk
                     except Exception as e:
                         print(f"\n❌ AI流式输出异常: {e}")
-                    print()
                     # 提取并执行命令
                     command = self.extract_json_command(ai_response)
                     if not command:
