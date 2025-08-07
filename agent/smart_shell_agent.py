@@ -33,7 +33,7 @@ else:
         INPUT_HANDLER_TYPE = "none"
 
 class SmartShellAgent:
-    def __init__(self, model_name: str = "gemma3:4b", work_directory: Optional[str] = None, provider: str = "ollama", openai_conf: Optional[dict] = None, openwebui_conf: Optional[dict] = None, params: Optional[dict] = None, normal_config: Optional[dict] = None, vision_config: Optional[dict] = None):
+    def __init__(self, model_name: str = "gemma3:4b", work_directory: Optional[str] = None, provider: str = "ollama", openai_conf: Optional[dict] = None, openwebui_conf: Optional[dict] = None, params: Optional[dict] = None, normal_config: Optional[dict] = None, vision_config: Optional[dict] = None, config_dir: Optional[str] = None):
         """
         初始化Smart Shell
         Args:
@@ -45,26 +45,31 @@ class SmartShellAgent:
             params: 通用参数（兼容旧格式）
             normal_config: 普通任务模型配置（新格式）
             vision_config: 视觉模型配置（新格式）
+            config_dir: 配置文件目录（可选，用于指定历史记录保存位置）
         """
         self.work_directory = Path(work_directory) if work_directory else Path.cwd()
         self.conversation_history = []
         self.operation_results = []
         
-        # 初始化历史记录管理器，使用config.json所在的目录
-        # 首先尝试在当前目录查找配置文件
-        current_config_dir = Path(".smartshell")
-        user_config_dir = Path.home() / ".smartshell"
-        
-        # 如果用户目录下有配置文件，使用用户目录
-        if (user_config_dir / "config.json").exists():
-            config_dir = user_config_dir
-        elif (current_config_dir / "config.json").exists():
-            config_dir = current_config_dir
+        # 初始化历史记录管理器，使用指定的配置目录或自动查找
+        if config_dir:
+            # 使用指定的配置目录
+            self.history_manager = HistoryManager(config_dir)
         else:
-            # 默认使用用户目录
-            config_dir = user_config_dir
+            # 自动查找配置文件目录
+            current_config_dir = Path(".smartshell")
+            user_config_dir = Path.home() / ".smartshell"
             
-        self.history_manager = HistoryManager(str(config_dir))
+            # 如果用户目录下有配置文件，使用用户目录
+            if (user_config_dir / "config.json").exists():
+                config_dir = user_config_dir
+            elif (current_config_dir / "config.json").exists():
+                config_dir = current_config_dir
+            else:
+                # 默认使用用户目录
+                config_dir = user_config_dir
+                
+            self.history_manager = HistoryManager(str(config_dir))
         
         # 支持新的双模型配置
         if normal_config and vision_config:

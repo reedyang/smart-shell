@@ -31,10 +31,14 @@ def main():
     user_config = os.path.join(user_home, ".smartshell/config.json")
     local_config = os.path.join(current_dir, ".smartshell/config.json")
     
+    config_dir = None  # 配置文件目录，用于历史记录保存
+    
     if os.path.exists(user_config):
         config_path = user_config
+        config_dir = os.path.dirname(user_config)  # 获取配置文件所在目录
     elif os.path.exists(local_config):
         config_path = local_config
+        config_dir = os.path.dirname(local_config)  # 获取配置文件所在目录
     
     if config_path:
         try:
@@ -78,7 +82,8 @@ def main():
             agent = SmartShellAgent(
                 work_directory=work_directory,
                 normal_config=normal_config,
-                vision_config=vision_config
+                vision_config=vision_config,
+                config_dir=config_dir
             )
             agent.run()
             return 0
@@ -93,7 +98,8 @@ def main():
                 model_name=model_name,
                 work_directory=work_directory,
                 provider="openai",
-                params=params
+                params=params,
+                config_dir=config_dir
             )
             agent.run()
             return 0
@@ -106,7 +112,8 @@ def main():
                 model_name=model_name,
                 work_directory=work_directory,
                 provider="openwebui",
-                params=params
+                params=params,
+                config_dir=config_dir
             )
             agent.run()
             return 0
@@ -145,7 +152,8 @@ def main():
             agent = SmartShellAgent(
                 model_name=model_name,
                 work_directory=work_directory,
-                provider="ollama"
+                provider="ollama",
+                config_dir=config_dir
             )
             agent.run()
             return 0
