@@ -1997,6 +1997,15 @@ big_image.jpg
         
         # 重置历史记录索引
         self.history_manager.reset_index()
+
+        # 优先使用已初始化的输入处理器（例如 Windows 下的 prompt_toolkit 补全）
+        if self.input_handler is not None:
+            try:
+                user_input = self.input_handler.get_input_with_completion(prompt)
+                # 这里不直接写入 HistoryManager，交由上层 run() 统一处理，避免重复
+                return user_input
+            except Exception as e:
+                print(f"⚠️ 输入处理器出错，回退到平台特定输入方案: {e}")
         
         # 在Windows系统上，优先使用prompt_toolkit以获得更好的中文输入支持
         if platform.system() == "Windows":
