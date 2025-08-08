@@ -310,7 +310,7 @@ class SmartShellAgent:
             print(f"⚠️ 验证{model_type}时出错: {e}")
             print(f"💡 请确保 Ollama 服务正在运行")
 
-    def call_ai(self, user_input: str, context: str = "", stream: bool = False):
+    def call_ai(self, user_input: str, context: str = "", stream: bool = False, include_knowledge: bool = True):
         """调用大模型API获取AI回复，支持流式输出。stream=True时返回生成器"""
         try:
             # 确保os未被局部变量遮蔽
@@ -320,22 +320,37 @@ class SmartShellAgent:
             for msg in self.conversation_history[-5:]:
                 messages.append(msg)
             
-            # 从知识库获取相关上下文
+            # 从知识库获取相关上下文（可开关）
             knowledge_context = ""
-            if self.knowledge_manager:
-                try:
-                    knowledge_context = self.knowledge_manager.get_knowledge_context(user_input)
-                    if knowledge_context:
-                        print(f"📚 从知识库检索到相关信息")
-                except Exception as e:
-                    print(f"⚠️ 知识库检索失败: {e}")
+            if include_knowledge:
+                # 若允许查询但管理器为空，尝试懒加载初始化一次（需开关开启且依赖可用）
+                if self.knowledge_manager is None and getattr(self, 'knowledge_enabled', True) and KNOWLEDGE_AVAILABLE:
+                    try:
+                        embedding_model = "nomic-embed-text"
+                        self.knowledge_manager = KnowledgeManager(str(self.config_dir), embedding_model)
+                        # 尝试同步（若已同步会做快速检查）
+                        self.knowledge_manager.sync_knowledge_base()
+                    except Exception as e:
+                        # 初始化失败则保持为空，并继续不使用知识库
+                        self.knowledge_manager = None
+                        print(f"⚠️ 知识库懒加载初始化失败: {e}")
+                if self.knowledge_manager:
+                    try:
+                        print("🔎 正在查询知识库...")
+                        knowledge_context = self.knowledge_manager.get_knowledge_context(user_input)
+                        if knowledge_context:
+                            print("📚 从知识库检索到相关信息")
+                        else:
+                            print("ℹ️ 知识库未找到相关信息")
+                    except Exception as e:
+                        print(f"⚠️ 知识库检索失败: {e}")
             
             current_input = f"当前工作目录: {self.work_directory}\n"
             if self.operation_results:
                 current_input += f"最近的操作结果: {self.operation_results[-1]}\n"
             if context:
                 current_input += f"操作上下文: {context}\n"
-            if knowledge_context:
+            if knowledge_context and knowledge_context != "":
                 current_input += f"知识库相关信息:\n{knowledge_context}\n"
             current_input += f"用户输入: {user_input}"
             messages.append({"role": "user", "content": current_input})
@@ -1909,7 +1924,14 @@ big_image.jpg
                     # 获取AI回复
                     print("🤖 AI正在思考...")
                     # 流式输出AI回复
-                    stream_gen = self.call_ai(next_input, context=json.dumps(last_result, ensure_ascii=False) if last_result else "", stream=True)
+                    # 首次用户输入：查询知识库；执行结果回传：不查询知识库
+                    # 在第一轮（last_result is None）查询知识库，后续回传执行结果则关闭
+                    stream_gen = self.call_ai(
+                        user_input if last_result is None else next_input,
+                        context=json.dumps(last_result, ensure_ascii=False) if last_result else "",
+                        stream=True,
+                        include_knowledge=(last_result is None)
+                    )
                     ai_response = ""
                     try:
                         for chunk in stream_gen:
