@@ -1488,8 +1488,7 @@ big_image.jpg
         """运行AI Agent主循环，支持自动多轮命令执行，AI可根据上次执行结果继续生成命令，遇到{"action": "done"}时终止。"""
         import sys
         
-
-        print("输入 'exit' 或 'quit' 退出程序")
+        print("输入 'exit' 或 'quit' 退出程序, 输入 'help' 查看帮助")
         print("=" * 80)
 
         import os
@@ -1541,16 +1540,7 @@ big_image.jpg
                     print("  3. clear history, 清除历史记录 - 清除命令历史记录")
                     print("  4. help, 帮助                  - 显示此帮助信息")
                     print("\n📌 系统命令：")
-                    print("  1. cd <目录>                  - 切换工作目录")
-                    print("  2. dir, ls, list              - 列出目录内容")
-                    print("  3. del, delete, rm            - 删除文件或目录")
-                    print("  4. type, cat                  - 显示文件内容")
-                    print("  5. echo                       - 显示文本")
-                    print("  6. ping                       - 网络连通性测试")
-                    print("  7. ipconfig, ifconfig         - 显示网络配置")
-                    print("  8. whoami                     - 显示当前用户")
-                    print("  9. hostname                   - 显示主机名")
-                    print("  10. date, time                - 显示日期时间")
+                    print("  在PATH环境变量中能够找到的命令都可以直接使用")
                     print("\n📌 自然语言命令：")
                     print("您可以使用自然语言描述您的需求，例如：")
                     print("  1. 创建一个名为test的文件夹")
