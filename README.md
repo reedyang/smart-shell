@@ -10,6 +10,7 @@
 - 🖼️ **图片解读**: 使用AI分析图片中的文字、物体、场景等信息
 - ⌨️ **Tab补全**: 智能文件名和路径自动补全
 - 📝 **历史记录**: 支持命令历史记录和导航
+- 📚 **知识库**: 自动索引文档，提供智能检索和上下文增强
 - 🔄 **跨平台**: 支持Windows、Linux、macOS
 - 🎯 **双模型支持**: 可配置不同模型用于普通任务和图像处理
 
@@ -19,6 +20,7 @@
 
 - Python 3.8+
 - 网络连接（用于AI模型调用）
+- Ollama（用于知识库向量化，可选）
 
 ### 安装依赖
 
@@ -55,6 +57,23 @@ python main.py
 
 ## 🤖 AI功能
 
+### 知识库功能
+
+Smart Shell 集成了智能知识库系统，可以自动索引和检索文档：
+
+- **自动同步**: 程序启动时自动检测和索引知识库目录中的文档
+- **智能检索**: 用户提问时自动从知识库检索相关信息
+- **多格式支持**: 支持TXT、PDF、DOCX、MD、CSV、Excel等多种文档格式
+- **语义搜索**: 基于向量数据库的语义搜索，理解查询意图
+- **实时更新**: 检测文档变化并自动更新索引
+
+#### 使用方法
+
+1. **添加文档**: 将文档放入 `.smartshell/knowledge/` 目录
+2. **查看状态**: 使用 `knowledge stats` 查看知识库统计
+3. **手动同步**: 使用 `knowledge sync` 手动同步知识库
+4. **搜索内容**: 使用 `knowledge search 查询内容` 搜索知识库
+
 ### 图片解读功能
 
 支持分析各种格式的图片文件，包括：
@@ -90,8 +109,12 @@ smart-shell/
 ├── main.py                        # 主程序入口
 ├── .smartshell                    # 配置目录
 |   ├── config.json                # 配置文件
+|   ├── knowledge/                 # 知识库文档目录
+|   └── knowledge_db/              # 知识库数据库（自动生成）
 ├── agent/                         # AI代理模块
 │   ├── smart_shell_agent.py       # Smart Shell AI代理
+│   ├── knowledge_manager.py       # 知识库管理器
+│   ├── history_manager.py         # 历史记录管理器
 │   ├── windows_input.py           # Windows输入处理器
 │   └── tab_completer.py           # Unix系统Tab补全
 ├── demo/                          # 演示文件
@@ -186,6 +209,13 @@ brew install ffmpeg      # macOS
 - 确保配置文件格式正确（JSON格式）
 - 检查API密钥和URL是否正确
 - 对于Ollama模型，确保模型已下载并可用
+
+### 知识库问题
+
+- 确保已安装知识库相关依赖：`pip install chromadb langchain sentence-transformers`
+- 对于知识库向量化，需要安装并运行Ollama服务
+- 确保知识库目录 `.smartshell/knowledge/` 存在且有读取权限
+- 如果知识库初始化失败，程序会继续运行但不会使用知识库功能
 
 ## 演示效果
 ![Convert media](demo/convert_media.png)

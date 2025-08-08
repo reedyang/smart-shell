@@ -10,6 +10,14 @@ from datetime import datetime
 # 导入历史记录管理器
 from .history_manager import HistoryManager
 
+# 导入知识库管理器
+try:
+    from .knowledge_manager import KnowledgeManager
+    KNOWLEDGE_AVAILABLE = True
+except ImportError:
+    KNOWLEDGE_AVAILABLE = False
+    print("⚠️ 知识库功能不可用")
+
 # 导入tab补全模块
 import os
 import platform
@@ -70,6 +78,19 @@ class SmartShellAgent:
                 config_dir = user_config_dir
                 
             self.history_manager = HistoryManager(str(config_dir))
+        
+        # 初始化知识库管理器
+        self.knowledge_manager = None
+        if KNOWLEDGE_AVAILABLE:
+            try:
+                # 使用轻量级的中文向量模型
+                embedding_model = "nomic-embed-text"
+                self.knowledge_manager = KnowledgeManager(str(config_dir), embedding_model)
+                # 启动时同步知识库
+                self.knowledge_manager.sync_knowledge_base()
+            except Exception as e:
+                print(f"⚠️ 知识库初始化失败: {e}")
+                self.knowledge_manager = None
         
         # 支持新的双模型配置
         if normal_config and vision_config:
@@ -178,11 +199,24 @@ class SmartShellAgent:
             messages = [{"role": "system", "content": f"{self.system_prompt}\n当前操作系统信息：{os_info}"}]
             for msg in self.conversation_history[-5:]:
                 messages.append(msg)
+            
+            # 从知识库获取相关上下文
+            knowledge_context = ""
+            if self.knowledge_manager:
+                try:
+                    knowledge_context = self.knowledge_manager.get_knowledge_context(user_input)
+                    if knowledge_context:
+                        print(f"📚 从知识库检索到相关信息")
+                except Exception as e:
+                    print(f"⚠️ 知识库检索失败: {e}")
+            
             current_input = f"当前工作目录: {self.work_directory}\n"
             if self.operation_results:
                 current_input += f"最近的操作结果: {self.operation_results[-1]}\n"
             if context:
                 current_input += f"操作上下文: {context}\n"
+            if knowledge_context:
+                current_input += f"知识库相关信息:\n{knowledge_context}\n"
             current_input += f"用户输入: {user_input}"
             messages.append({"role": "user", "content": current_input})
 
@@ -1482,6 +1516,70 @@ big_image.jpg
                 print("❌ diff命令缺少file1或file2参数")
                 return {"success": False, "error": "缺少file1或file2参数"}
 
+        elif action == "knowledge_sync":
+            """同步知识库"""
+            if not self.knowledge_manager:
+                return {"success": False, "error": "知识库功能不可用"}
+            
+            try:
+                self.knowledge_manager.sync_knowledge_base()
+                return {"success": True, "message": "知识库同步完成"}
+            except Exception as e:
+                return {"success": False, "error": f"知识库同步失败: {str(e)}"}
+
+        elif action == "knowledge_stats":
+            """获取知识库统计信息"""
+            if not self.knowledge_manager:
+                return {"success": False, "error": "知识库功能不可用"}
+            
+            try:
+                stats = self.knowledge_manager.get_knowledge_stats()
+                if stats:
+                    print(f"\n📊 知识库统计信息:")
+                    print(f"📄 文档总数: {stats.get('total_documents', 0)}")
+                    print(f"📝 文本片段总数: {stats.get('total_chunks', 0)}")
+                    print(f"📁 支持的文件类型: {', '.join(stats.get('supported_extensions', []))}")
+                    
+                    file_types = stats.get('file_types', {})
+                    if file_types:
+                        print(f"📋 文件类型分布:")
+                        for ext, count in file_types.items():
+                            print(f"  {ext}: {count} 个文件")
+                else:
+                    print("❌ 获取知识库统计信息失败")
+                
+                return {"success": True, "stats": stats}
+            except Exception as e:
+                return {"success": False, "error": f"获取知识库统计信息失败: {str(e)}"}
+
+        elif action == "knowledge_search":
+            """搜索知识库"""
+            if not self.knowledge_manager:
+                return {"success": False, "error": "知识库功能不可用"}
+            
+            query = params.get("query", "")
+            top_k = params.get("top_k", 5)
+            
+            if not query:
+                return {"success": False, "error": "缺少搜索查询参数"}
+            
+            try:
+                results = self.knowledge_manager.search_knowledge(query, top_k)
+                if results:
+                    print(f"\n🔍 知识库搜索结果 (查询: '{query}'):")
+                    print("=" * 80)
+                    for i, result in enumerate(results, 1):
+                        print(f"{i}. 来源: {result['source']}")
+                        print(f"   相似度: {1 - result['similarity']:.3f}")
+                        print(f"   内容: {result['content'][:200]}...")
+                        print("-" * 40)
+                else:
+                    print(f"🔍 未找到相关结果: '{query}'")
+                
+                return {"success": True, "results": results, "query": query}
+            except Exception as e:
+                return {"success": False, "error": f"知识库搜索失败: {str(e)}"}
+
         return {"success": False, "error": "未知的操作类型"}
 
     def run(self):
@@ -1530,6 +1628,27 @@ big_image.jpg
                     self.history_manager.clear_history()
                     print("✅ 历史记录已清除")
                     continue
+                
+                # 知识库相关命令
+                if self.knowledge_manager:
+                    if user_input.lower() in ['knowledge sync', '同步知识库', '知识库同步']:
+                        result = self.execute_command({"action": "knowledge_sync", "params": {}})
+                        continue
+                    
+                    if user_input.lower() in ['knowledge stats', '知识库统计', '查看知识库']:
+                        result = self.execute_command({"action": "knowledge_stats", "params": {}})
+                        continue
+                    
+                    if user_input.lower().startswith('knowledge search ') or user_input.lower().startswith('搜索知识库 '):
+                        query = user_input[16:] if user_input.lower().startswith('knowledge search ') else user_input[5:]
+                        if query.strip():
+                            result = self.execute_command({
+                                "action": "knowledge_search", 
+                                "params": {"query": query.strip()}
+                            })
+                        else:
+                            print("❌ 请提供搜索查询内容")
+                        continue
                 if user_input.lower() == 'help' or user_input.lower() == '帮助':
                     # 显示帮助信息
                     print("\n🌟 Smart Shell 帮助信息")
@@ -1539,6 +1658,13 @@ big_image.jpg
                     print("  2. cls, clear, 清空屏幕        - 清空屏幕")
                     print("  3. clear history, 清除历史记录 - 清除命令历史记录")
                     print("  4. help, 帮助                  - 显示此帮助信息")
+                    
+                    if self.knowledge_manager:
+                        print("\n📚 知识库命令：")
+                        print("  5. knowledge sync, 同步知识库    - 同步知识库文档")
+                        print("  6. knowledge stats, 知识库统计   - 查看知识库统计信息")
+                        print("  7. knowledge search <查询>       - 搜索知识库")
+                    
                     print("\n📌 系统命令：")
                     print("  在PATH环境变量中能够找到的命令都可以直接使用")
                     print("\n📌 自然语言命令：")
@@ -1551,11 +1677,19 @@ big_image.jpg
                     print("  6. 比较两个文件的差异")
                     print("  7. 查找最近修改的文件")
                     print("  8. 删除所有临时文件")
+                    
+                    if self.knowledge_manager:
+                        print("  9. 同步知识库")
+                        print("  10. 查看知识库统计")
+                        print("  11. 在知识库中搜索特定内容")
+                    
                     print("\n💡 提示：")
                     print("  - Tab键可以自动补全文件路径")
                     print("  - 上下方向键可以浏览历史命令")
                     print("  - 支持中英文混合输入")
                     print("  - AI会理解您的自然语言指令并执行相应操作")
+                    if self.knowledge_manager:
+                        print("  - 知识库会自动检索相关信息来辅助AI回答")
                     print("=" * 80)
                     continue
                 if not user_input:
