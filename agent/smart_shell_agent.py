@@ -1526,6 +1526,48 @@ big_image.jpg
                     import os
                     os.system('cls' if os_name == 'nt' else 'clear')
                     continue
+                if user_input.lower() == 'clear history' or user_input.lower() == '清除历史记录':
+                    # 清除历史记录
+                    self.history_manager.clear_history()
+                    print("✅ 历史记录已清除")
+                    continue
+                if user_input.lower() == 'help' or user_input.lower() == '帮助':
+                    # 显示帮助信息
+                    print("\n🌟 Smart Shell 帮助信息")
+                    print("=" * 80)
+                    print("\n📌 内置命令：")
+                    print("  1. exit, quit, 退出            - 退出程序")
+                    print("  2. cls, clear, 清空屏幕        - 清空屏幕")
+                    print("  3. clear history, 清除历史记录 - 清除命令历史记录")
+                    print("  4. help, 帮助                  - 显示此帮助信息")
+                    print("\n📌 系统命令：")
+                    print("  1. cd <目录>                  - 切换工作目录")
+                    print("  2. dir, ls, list              - 列出目录内容")
+                    print("  3. del, delete, rm            - 删除文件或目录")
+                    print("  4. type, cat                  - 显示文件内容")
+                    print("  5. echo                       - 显示文本")
+                    print("  6. ping                       - 网络连通性测试")
+                    print("  7. ipconfig, ifconfig         - 显示网络配置")
+                    print("  8. whoami                     - 显示当前用户")
+                    print("  9. hostname                   - 显示主机名")
+                    print("  10. date, time                - 显示日期时间")
+                    print("\n📌 自然语言命令：")
+                    print("您可以使用自然语言描述您的需求，例如：")
+                    print("  1. 创建一个名为test的文件夹")
+                    print("  2. 将文件a.txt重命名为b.txt")
+                    print("  3. 分析这张图片的内容")
+                    print("  4. 总结这个文本文件")
+                    print("  5. 将视频转换为mp4格式")
+                    print("  6. 比较两个文件的差异")
+                    print("  7. 查找最近修改的文件")
+                    print("  8. 删除所有临时文件")
+                    print("\n💡 提示：")
+                    print("  - Tab键可以自动补全文件路径")
+                    print("  - 上下方向键可以浏览历史命令")
+                    print("  - 支持中英文混合输入")
+                    print("  - AI会理解您的自然语言指令并执行相应操作")
+                    print("=" * 80)
+                    continue
                 if not user_input:
                     continue
 
