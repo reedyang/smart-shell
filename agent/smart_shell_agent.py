@@ -63,6 +63,7 @@ class SmartShellAgent:
         if config_dir:
             # 使用指定的配置目录
             self.history_manager = HistoryManager(config_dir)
+            self.config_dir = Path(config_dir)
         else:
             # 自动查找配置文件目录
             current_config_dir = Path(".smartshell")
@@ -78,10 +79,22 @@ class SmartShellAgent:
                 config_dir = user_config_dir
                 
             self.history_manager = HistoryManager(str(config_dir))
+            self.config_dir = Path(config_dir)
+
+        # 加载配置以确定知识库开关（默认开启）
+        self.knowledge_enabled = True
+        try:
+            cfg_path = self.config_dir / "config.json"
+            if cfg_path.exists():
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg_data = json.load(f)
+                self.knowledge_enabled = bool(cfg_data.get("knowledge_enabled", True))
+        except Exception as e:
+            print(f"⚠️ 读取配置中的知识库开关失败，默认开启: {e}")
         
         # 初始化知识库管理器
         self.knowledge_manager = None
-        if KNOWLEDGE_AVAILABLE:
+        if KNOWLEDGE_AVAILABLE and self.knowledge_enabled:
             try:
                 # 使用轻量级的中文向量模型
                 embedding_model = "nomic-embed-text"
@@ -91,6 +104,108 @@ class SmartShellAgent:
             except Exception as e:
                 print(f"⚠️ 知识库初始化失败: {e}")
                 self.knowledge_manager = None
+
+        # 继续初始化其余组件（双模型配置、系统提示词、输入处理器）
+        if normal_config and vision_config:
+            self.dual_model_mode = True
+            self.normal_config = normal_config
+            self.vision_config = vision_config
+            # 设置普通任务模型
+            self.normal_provider = normal_config.get("provider", "ollama")
+            self.normal_params = normal_config.get("params", {})
+            self.normal_model_name = self.normal_params.get("model", "gemma3:4b")
+            # 设置视觉模型
+            self.vision_provider = vision_config.get("provider", "ollama")
+            self.vision_params = vision_config.get("params", {})
+            self.vision_model_name = self.vision_params.get("model", "qwen2.5vl:7b")
+            # 兼容旧接口
+            self.model_name = self.normal_model_name
+            self.provider = self.normal_provider
+            self.params = self.normal_params
+            self.openai_conf = self.normal_params if self.normal_provider == "openai" else None
+            self.openwebui_conf = self.normal_params if self.normal_provider == "openwebui" else None
+        else:
+            # 兼容旧格式
+            self.dual_model_mode = False
+            self.model_name = model_name
+            self.provider = provider
+            self.openai_conf = openai_conf
+            self.openwebui_conf = openwebui_conf
+            self.params = params
+            # 兼容params统一配置
+            if self.provider == 'openai' and self.openai_conf is None and params is not None:
+                self.openai_conf = params
+            if self.provider == 'openwebui' and self.openwebui_conf is None and params is not None:
+                self.openwebui_conf = params
+
+        # 验证模型
+        self._validate_model()
+
+        # 系统提示词
+        prompt_path = os.path.join(os.path.dirname(__file__), 'system_prompt.txt')
+        with open(prompt_path, 'r', encoding='utf-8') as f:
+            self.system_prompt = f.read()
+
+        # 初始化输入处理器，确保属性存在
+        self.input_handler = None
+        if TAB_COMPLETION_AVAILABLE:
+            try:
+                if INPUT_HANDLER_TYPE == "windows":
+                    self.input_handler = create_windows_input_handler(self.work_directory)
+                elif INPUT_HANDLER_TYPE == "readline":
+                    self.input_handler = create_tab_completer(self.work_directory)
+                else:
+                    print("⚠️ 未知的输入处理器类型")
+            except Exception as e:
+                print(f"⚠️ 输入处理器初始化失败: {e}")
+        else:
+            print("⚠️ Tab补全功能不可用")
+
+    def _save_knowledge_enabled_to_config(self) -> bool:
+        """将知识库开关状态保存到 config.json"""
+        try:
+            cfg_path = self.config_dir / "config.json"
+            cfg_data = {}
+            if cfg_path.exists():
+                try:
+                    with open(cfg_path, "r", encoding="utf-8") as f:
+                        cfg_data = json.load(f) or {}
+                except Exception:
+                    cfg_data = {}
+            cfg_data["knowledge_enabled"] = bool(self.knowledge_enabled)
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump(cfg_data, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            print(f"⚠️ 保存知识库开关到配置失败: {e}")
+            return False
+
+    def _enable_knowledge(self) -> Dict[str, Any]:
+        """开启知识库功能，持久化并即时生效"""
+        if self.knowledge_enabled and self.knowledge_manager is not None:
+            return {"success": True, "message": "知识库已处于开启状态"}
+        self.knowledge_enabled = True
+        saved = self._save_knowledge_enabled_to_config()
+        if not KNOWLEDGE_AVAILABLE:
+            return {"success": False, "error": "缺少知识库依赖，无法启用"}
+        try:
+            embedding_model = "nomic-embed-text"
+            self.knowledge_manager = KnowledgeManager(str(self.config_dir), embedding_model)
+            self.knowledge_manager.sync_knowledge_base()
+            return {"success": True, "message": f"知识库已开启{'（已保存配置）' if saved else ''}"}
+        except Exception as e:
+            self.knowledge_manager = None
+            return {"success": False, "error": f"启用知识库失败: {e}"}
+
+    def _disable_knowledge(self) -> Dict[str, Any]:
+        """关闭知识库功能，持久化并即时生效"""
+        if not self.knowledge_enabled and self.knowledge_manager is None:
+            return {"success": True, "message": "知识库已处于关闭状态"}
+        self.knowledge_enabled = False
+        saved = self._save_knowledge_enabled_to_config()
+        # 释放引用（让底层资源由GC清理）
+        self.knowledge_manager = None
+        return {"success": True, "message": f"知识库已关闭{'（已保存配置）' if saved else ''}"}
         
         # 支持新的双模型配置
         if normal_config and vision_config:
@@ -1518,6 +1633,8 @@ big_image.jpg
 
         elif action == "knowledge_sync":
             """同步知识库"""
+            if not self.knowledge_enabled:
+                return {"success": False, "error": "知识库功能已关闭，可使用 'knowledge on' 开启"}
             if not self.knowledge_manager:
                 return {"success": False, "error": "知识库功能不可用"}
             
@@ -1529,6 +1646,8 @@ big_image.jpg
 
         elif action == "knowledge_stats":
             """获取知识库统计信息"""
+            if not self.knowledge_enabled:
+                return {"success": False, "error": "知识库功能已关闭，可使用 'knowledge on' 开启"}
             if not self.knowledge_manager:
                 return {"success": False, "error": "知识库功能不可用"}
             
@@ -1554,6 +1673,8 @@ big_image.jpg
 
         elif action == "knowledge_search":
             """搜索知识库"""
+            if not self.knowledge_enabled:
+                return {"success": False, "error": "知识库功能已关闭，可使用 'knowledge on' 开启"}
             if not self.knowledge_manager:
                 return {"success": False, "error": "知识库功能不可用"}
             
@@ -1580,12 +1701,35 @@ big_image.jpg
             except Exception as e:
                 return {"success": False, "error": f"知识库搜索失败: {str(e)}"}
 
+        elif action == "knowledge_enable" or action == "knowledge_on":
+            result = self._enable_knowledge()
+            if result.get("success"):
+                print(f"✅ {result.get('message', '知识库已开启')}")
+            else:
+                print(f"❌ {result.get('error', '开启失败')}")
+            return result
+
+        elif action == "knowledge_disable" or action == "knowledge_off":
+            result = self._disable_knowledge()
+            if result.get("success"):
+                print(f"✅ {result.get('message', '知识库已关闭')}")
+            else:
+                print(f"❌ {result.get('error', '关闭失败')}")
+            return result
+
         return {"success": False, "error": "未知的操作类型"}
 
     def run(self):
         """运行AI Agent主循环，支持自动多轮命令执行，AI可根据上次执行结果继续生成命令，遇到{"action": "done"}时终止。"""
         import sys
         
+        # 启动时提示知识库状态
+        if not self.knowledge_enabled:
+            print("知识库当前处于关闭状态。可使用 'knowledge on' 或 '开启知识库' 来开启")
+        elif not self.knowledge_manager:
+            # 已开启但不可用（依赖缺失或初始化失败）
+            print("知识库已开启但当前不可用。请检查依赖或稍后重试。可使用 'knowledge off' 暂时关闭。")
+
         print("输入 'exit' 或 'quit' 退出程序, 输入 'help' 查看帮助")
         print("=" * 80)
 
@@ -1629,8 +1773,16 @@ big_image.jpg
                     print("✅ 历史记录已清除")
                     continue
                 
+                # 知识库开关命令（不受当前开关状态限制）
+                if user_input.lower() in ['knowledge on', 'knowledge enable', '开启知识库']:
+                    self.execute_command({"action": "knowledge_on", "params": {}})
+                    continue
+                if user_input.lower() in ['knowledge off', 'knowledge disable', '关闭知识库']:
+                    self.execute_command({"action": "knowledge_off", "params": {}})
+                    continue
+
                 # 知识库相关命令
-                if self.knowledge_manager:
+                if self.knowledge_enabled and self.knowledge_manager:
                     if user_input.lower() in ['knowledge sync', '同步知识库', '知识库同步']:
                         result = self.execute_command({"action": "knowledge_sync", "params": {}})
                         continue
@@ -1649,6 +1801,11 @@ big_image.jpg
                         else:
                             print("❌ 请提供搜索查询内容")
                         continue
+                else:
+                    # 如果知识库关闭，拦截相关命令并提示
+                    if user_input.lower().startswith('knowledge '):
+                        print("ℹ️ 知识库已关闭，可使用 'knowledge on' 开启")
+                        continue
                 if user_input.lower() == 'help' or user_input.lower() == '帮助':
                     # 显示帮助信息
                     print("\n🌟 Smart Shell 帮助信息")
@@ -1659,11 +1816,12 @@ big_image.jpg
                     print("  3. clear history, 清除历史记录 - 清除命令历史记录")
                     print("  4. help, 帮助                  - 显示此帮助信息")
                     
-                    if self.knowledge_manager:
+                    if self.knowledge_enabled:
                         print("\n📚 知识库命令：")
-                        print("  5. knowledge sync, 同步知识库    - 同步知识库文档")
-                        print("  6. knowledge stats, 知识库统计   - 查看知识库统计信息")
-                        print("  7. knowledge search <查询>       - 搜索知识库")
+                        print("  5. knowledge on/off, 开启/关闭知识库  - 开关知识库功能（状态会保存到config.json）")
+                        print("  6. knowledge sync, 同步知识库        - 同步知识库文档")
+                        print("  7. knowledge stats, 知识库统计       - 查看知识库统计信息")
+                        print("  8. knowledge search <查询>           - 搜索知识库")
                     
                     print("\n📌 系统命令：")
                     print("  在PATH环境变量中能够找到的命令都可以直接使用")
