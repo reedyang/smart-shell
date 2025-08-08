@@ -217,20 +217,29 @@ class FileCompleter(Completer):
 class WindowsInputHandler:
     """Windows输入处理器，使用prompt_toolkit实现Tab补全和中文输入支持"""
     
-    def __init__(self, work_directory: Path):
+    def __init__(self, work_directory: Path, initial_history: Optional[List[str]] = None):
         """
         初始化输入处理器
         Args:
             work_directory: 当前工作目录
+            initial_history: 预置的历史命令列表（通常来自持久化的HistoryManager）
         """
         self.work_directory = work_directory
         self.history = []
         
         if PROMPT_TOOLKIT_AVAILABLE:
-            # 使用prompt_toolkit
+            # 使用prompt_toolkit，并将历史记录注入到会话中
             self.completer = FileCompleter(work_directory)
+            self._pt_history = InMemoryHistory()
+            if initial_history:
+                for entry in initial_history:
+                    try:
+                        self._pt_history.append_string(entry)
+                    except Exception:
+                        pass
             self.session = PromptSession(
                 completer=self.completer,
+                history=self._pt_history,
                 enable_system_prompt=True,
                 enable_suspend=True,
                 complete_in_thread=True
@@ -278,6 +287,6 @@ class WindowsInputHandler:
             self.completer.work_directory = new_directory
 
 
-def create_windows_input_handler(work_directory: Path) -> WindowsInputHandler:
+def create_windows_input_handler(work_directory: Path, initial_history: Optional[List[str]] = None) -> WindowsInputHandler:
     """创建Windows输入处理器"""
-    return WindowsInputHandler(work_directory) 
+    return WindowsInputHandler(work_directory, initial_history)

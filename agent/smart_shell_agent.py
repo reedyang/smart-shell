@@ -151,7 +151,12 @@ class SmartShellAgent:
         if TAB_COMPLETION_AVAILABLE:
             try:
                 if INPUT_HANDLER_TYPE == "windows":
-                    self.input_handler = create_windows_input_handler(self.work_directory)
+                    # 构建初始历史供 prompt_toolkit 使用
+                    try:
+                        initial_history = self.history_manager.get_all_history()
+                    except Exception:
+                        initial_history = []
+                    self.input_handler = create_windows_input_handler(self.work_directory, initial_history)
                 elif INPUT_HANDLER_TYPE == "readline":
                     self.input_handler = create_tab_completer(self.work_directory)
                 else:
