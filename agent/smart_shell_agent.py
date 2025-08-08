@@ -597,7 +597,7 @@ class SmartShellAgent:
                     return ai_response
             else:
                 # 对于不支持多模态的提供者，回退到文本模式
-                return f"⚠️ 警告：{provider} 提供者不支持多模态功能，回退到文本模式。\n" + self.call_ai(user_input, context, stream)
+                return f"⚠️ 警告：{provider} 提供者不支持多模态功能，回退到文本模式。\n" + self.call_ai(user_input, context, stream, include_knowledge=False)
                 
         except Exception as e:
             error_msg = f"调用多模态大模型API时出错: {str(e)} (provider: {provider}, model: {model_name})"
@@ -721,8 +721,8 @@ big_image.jpg
 
 现在开始分析："""
             
-            # 调用AI进行筛选
-            ai_response = self.call_ai(ai_prompt)
+            # 调用AI进行筛选（不查询知识库）
+            ai_response = self.call_ai(ai_prompt, include_knowledge=False)
             
             # 解析AI回复，提取符合条件的文件名
             if "无符合条件的文件" in ai_response:
@@ -1053,7 +1053,7 @@ big_image.jpg
             except Exception as e:
                 return {"success": False, "error": f"无法读取文件内容: {str(e)}"}
             prompt = f"请用中文简要总结以下文件内容（200字以内）：\n{content}"
-            summary = self.call_ai(prompt)
+            summary = self.call_ai(prompt, include_knowledge=False)
             return {"success": True, "summary": summary, "file": str(abs_path)}
         except Exception as e:
             return {"success": False, "error": f"总结文件失败: {str(e)}"}
@@ -1392,6 +1392,16 @@ big_image.jpg
                 sub_action = subcmd.get("action")
                 sub_result = self.execute_command(subcmd)
                 results.append({"action": sub_action, "result": sub_result})
+                
+                # 检查用户是否取消了子命令
+                if not sub_result.get("success", True) and (
+                    "用户取消了操作" in sub_result.get("error", "") or 
+                    "用户拒绝" in sub_result.get("error", "") or
+                    "用户取消" in sub_result.get("error", "")
+                ):
+                    # 用户取消了某个子命令，停止执行剩余命令
+                    return {"success": False, "error": "用户取消了操作", "results": results}
+                
                 if not sub_result.get("success", True):
                     all_success = False
             return {"success": all_success, "results": results}
@@ -1920,17 +1930,17 @@ big_image.jpg
 
                 last_result = None
                 next_input = user_input
+                is_first_round = True  # 标记是否为第一轮
                 while True:
                     # 获取AI回复
                     print("🤖 AI正在思考...")
                     # 流式输出AI回复
-                    # 首次用户输入：查询知识库；执行结果回传：不查询知识库
-                    # 在第一轮（last_result is None）查询知识库，后续回传执行结果则关闭
+                    # 只在第一轮用户输入时查询知识库，后续所有命令执行结果回传都不查询
                     stream_gen = self.call_ai(
                         user_input if last_result is None else next_input,
                         context=json.dumps(last_result, ensure_ascii=False) if last_result else "",
                         stream=True,
-                        include_knowledge=(last_result is None)
+                        include_knowledge=is_first_round  # 只有第一轮查询知识库
                     )
                     ai_response = ""
                     try:
@@ -1958,6 +1968,19 @@ big_image.jpg
                         "timestamp": datetime.now().isoformat()
                     })
                     last_result = result
+                    
+                    # 检查用户是否取消了操作
+                    if not result.get("success", True) and (
+                        "用户取消了操作" in result.get("error", "") or 
+                        "用户拒绝" in result.get("error", "") or
+                        "用户取消" in result.get("error", "")
+                    ):
+                        # 向AI发送明确的取消消息，要求输出done命令
+                        next_input = "用户取消了操作，请不要再继续执行任何命令，直接输出'{\"action\": \"done\"}'"
+                        continue
+                    
+                    # 第一轮结束后，后续轮次不再查询知识库
+                    is_first_round = False
                     # 若AI未自动输出done，则继续将本次结果传给AI生成下一个命令
                     next_input = "命令执行结果：" + json.dumps(self.operation_results[-1], ensure_ascii=False)
 
