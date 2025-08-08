@@ -839,7 +839,7 @@ big_image.jpg
         except Exception as e:
             return {"success": False, "error": f"重命名失败: {str(e)}"}
 
-    def action_move_file(self, source: str, destination: str) -> Dict[str, Any]:
+    def action_move_file(self, source: str, destination: str, confirmed: bool = False) -> Dict[str, Any]:
         """移动文件或文件夹，支持通配符批量移动"""
         import glob
         try:
@@ -854,6 +854,17 @@ big_image.jpg
                 else:
                     dest_path = self.work_directory / destination
                 dest_path.mkdir(parents=True, exist_ok=True)
+                
+                # 请求用户确认批量移动
+                if not confirmed:
+                    confirmation = input(f"您确定要批量移动 {len(matched_files)} 个文件到 '{dest_path}' 吗？(y/n): ")
+                    if confirmation.lower() != 'y':
+                        return {
+                            "success": False,
+                            "error": f"用户取消了批量移动操作",
+                            "confirmation_needed": False
+                        }
+                
                 moved = []
                 for file_path in matched_files:
                     target = dest_path / file_path.name
@@ -874,6 +885,17 @@ big_image.jpg
                     dest_path = self.work_directory / destination
                 if not source_path.exists():
                     return {"success": False, "error": f"源文件 '{source}' 不存在"}
+                
+                # 请求用户确认单文件移动
+                if not confirmed:
+                    confirmation = input(f"您确定要将 '{source}' 移动到 '{dest_path}' 吗？(y/n): ")
+                    if confirmation.lower() != 'y':
+                        return {
+                            "success": False,
+                            "error": f"用户取消了移动操作",
+                            "confirmation_needed": False
+                        }
+                
                 shutil.move(str(source_path), str(dest_path))
                 return {
                     "success": True,
@@ -1975,6 +1997,7 @@ big_image.jpg
                         "用户拒绝" in result.get("error", "") or
                         "用户取消" in result.get("error", "")
                     ):
+                        is_first_round = False
                         # 向AI发送明确的取消消息，要求输出done命令
                         next_input = "用户取消了操作，请不要再继续执行任何命令，直接输出'{\"action\": \"done\"}'"
                         continue
