@@ -350,12 +350,17 @@ class KnowledgeManager:
             if results['documents'] and results['documents'][0]:
                 for i, doc in enumerate(results['documents'][0]):
                     metadata = results['metadatas'][0][i] if results['metadatas'] and results['metadatas'][0] else {}
+                    # 将距离转换为相似度：cosine距离越小，相似度越高
+                    # cosine距离范围是0-2，0表示完全相似，2表示完全不相似
+                    distance = results['distances'][0][i] if results['distances'] and results['distances'][0] else 1.0
+                    similarity = 1.0 - (distance / 2.0)  # 转换为0-1的相似度
+                    
                     formatted_results.append({
                         'content': doc,
                         'source': metadata.get('source', 'unknown'),
                         'file_path': metadata.get('file_path', ''),
                         'chunk_index': metadata.get('chunk_index', 0),
-                        'similarity': results['distances'][0][i] if results['distances'] and results['distances'][0] else 0
+                        'similarity': similarity
                     })
             
             return formatted_results
@@ -378,10 +383,16 @@ class KnowledgeManager:
         if not results:
             return ""
         
+        # 过滤相似度过低的结果（相似度阈值设为0.3）
+        filtered_results = [r for r in results if r['similarity'] >= 0.3]
+        
+        if not filtered_results:
+            return ""
+        
         context_parts = []
         current_length = 0
         
-        for result in results:
+        for result in filtered_results:
             content = result['content']
             source = result['source']
             
@@ -389,6 +400,9 @@ class KnowledgeManager:
             content_length = len(content.encode('utf-8'))
             
             if current_length + content_length > max_length:
+                if len(context_parts) == 0:
+                    context_parts.append(f"【来源: {source}】\n{content[:max_length]}")
+                    current_length += max_length
                 break
             
             context_parts.append(f"【来源: {source}】\n{content}")
