@@ -316,7 +316,8 @@ class SmartShellAgent:
             # 确保os未被局部变量遮蔽
             import os
             os_info = os.uname() if hasattr(os, 'uname') else os.name
-            messages = [{"role": "system", "content": f"{self.system_prompt}\n当前操作系统信息：{os_info}"}]
+            date_time = datetime.now().strftime("%Y-%m-%d %A %H:%M:%S")
+            messages = [{"role": "system", "content": f"{self.system_prompt}\n当前操作系统信息：{os_info}\n当前日期时间：{date_time}"}]
             for msg in self.conversation_history[-5:]:
                 messages.append(msg)
             
@@ -405,6 +406,7 @@ class SmartShellAgent:
                 if stream:
                     def gen():
                         buffer = ""
+                        first_chunk = True
                         for line in resp.iter_lines():
                             if not line or not line.startswith(b"data: "):
                                 continue
@@ -415,8 +417,13 @@ class SmartShellAgent:
                                 data_str = data.decode('utf-8', errors='replace')
                                 delta = json.loads(data_str)["choices"][0]["delta"].get("content", "")
                                 if delta:
-                                    buffer += delta
-                                    yield delta
+                                    # 如果是第一个chunk，去除开头的空白字符
+                                    if first_chunk:
+                                        delta = delta.lstrip()
+                                        first_chunk = False
+                                    if delta:  # 再次检查是否为空
+                                        buffer += delta
+                                        yield delta
                             except Exception:
                                 continue
                         self.conversation_history.append({"role": "user", "content": user_input})
@@ -455,6 +462,7 @@ class SmartShellAgent:
                 if stream:
                     def gen():
                         buffer = ""
+                        first_chunk = True
                         for line in resp.iter_lines(decode_unicode=True):
                             if not line or not line.startswith("data: "):
                                 continue
@@ -464,8 +472,13 @@ class SmartShellAgent:
                             try:
                                 delta = json.loads(data)["choices"][0]["delta"].get("content", "")
                                 if delta:
-                                    buffer += delta
-                                    yield delta
+                                    # 如果是第一个chunk，去除开头的空白字符
+                                    if first_chunk:
+                                        delta = delta.lstrip()
+                                        first_chunk = False
+                                    if delta:  # 再次检查是否为空
+                                        buffer += delta
+                                        yield delta
                             except Exception:
                                 continue
                         self.conversation_history.append({"role": "user", "content": user_input})
@@ -495,11 +508,17 @@ class SmartShellAgent:
                     )
                     def gen():
                         buffer = ""
+                        first_chunk = True
                         for chunk in response:
                             delta = chunk.get("message", {}).get("content", "")
                             if delta:
-                                buffer += delta
-                                yield delta
+                                # 如果是第一个chunk，去除开头的空白字符
+                                if first_chunk:
+                                    delta = delta.lstrip()
+                                    first_chunk = False
+                                if delta:  # 再次检查是否为空
+                                    buffer += delta
+                                    yield delta
                         self.conversation_history.append({"role": "user", "content": user_input})
                         self.conversation_history.append({"role": "assistant", "content": buffer})
                     return gen()
@@ -577,11 +596,17 @@ class SmartShellAgent:
                     )
                     def gen():
                         buffer = ""
+                        first_chunk = True
                         for chunk in response:
                             delta = chunk.get("message", {}).get("content", "")
                             if delta:
-                                buffer += delta
-                                yield delta
+                                # 如果是第一个chunk，去除开头的空白字符
+                                if first_chunk:
+                                    delta = delta.lstrip()
+                                    first_chunk = False
+                                if delta:  # 再次检查是否为空
+                                    buffer += delta
+                                    yield delta
                         self.conversation_history.append({"role": "user", "content": user_input})
                         self.conversation_history.append({"role": "assistant", "content": buffer})
                     return gen()
