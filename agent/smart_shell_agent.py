@@ -1921,7 +1921,6 @@ big_image.jpg
                     print("\n💡 提示：")
                     print("  - Tab键可以自动补全文件路径")
                     print("  - 上下方向键可以浏览历史命令")
-                    print("  - 支持中英文混合输入")
                     print("  - AI会理解您的自然语言指令并执行相应操作")
                     if self.knowledge_manager:
                         print("  - 知识库会自动检索相关信息来辅助AI回答")
@@ -1967,8 +1966,6 @@ big_image.jpg
                                 
                                 # 等待进程结束
                                 return_code = process.wait()
-                                if return_code != 0:
-                                    print(f"⚠️ 命令退出码: {return_code}")
                             except Exception as e:
                                 print(f"❌ 命令执行异常: {e}")
                     except Exception as e:

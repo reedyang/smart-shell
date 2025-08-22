@@ -68,7 +68,11 @@ class FileCompleter(Completer):
         Returns:
             (file_part, prefix, suffix) - 文件名部分、前缀、后缀
         """
-
+        # 检查是否包含路径分隔符
+        if '/' in text or '\\' in text:
+            # 路径补全：直接返回整个文本作为文件部分
+            return text, "", ""
+        
         # 获取当前目录的所有文件名
         try:
             current_files = [item.name for item in self.work_directory.iterdir() if not item.name.startswith('.')]
@@ -137,12 +141,108 @@ class FileCompleter(Completer):
                 if item.name.lower().startswith(text.lower()):
                     matches.append(item.name)
             
+            # 如果没有找到匹配项，尝试智能补全
+            if not matches and text:
+                matches = self._smart_local_completion(text)
+            
             # 如果只有一个匹配项，直接返回
             if len(matches) == 1:
                 return matches
             
             # 如果有多个匹配项，返回所有匹配项供用户选择
-            # 不再计算共同前缀，让用户看到所有选项
+            return sorted(matches)
+        except Exception:
+            return []
+    
+    def _smart_local_completion(self, text: str) -> List[str]:
+        """
+        智能本地补全，包括自动添加常见文件扩展名
+        Args:
+            text: 要补全的文本
+        Returns:
+            智能补全的文件/文件夹名列表
+        """
+        matches = []
+        
+        # 常见文件扩展名
+        common_extensions = ['.txt', '.py', '.js', '.html', '.css', '.json', '.xml', '.md', '.log', '.ini', '.cfg', '.conf']
+        
+        # 1. 尝试直接匹配（不区分大小写）
+        for item in self.work_directory.iterdir():
+            if item.name.lower().startswith(text.lower()):
+                matches.append(item.name)
+        
+        # 2. 如果没有直接匹配，尝试添加常见扩展名
+        if not matches:
+            for ext in common_extensions:
+                potential_file = self.work_directory / (text + ext)
+                if potential_file.exists() and potential_file.is_file():
+                    matches.append(text + ext)
+        
+        # 3. 如果还是没有，尝试模糊匹配（包含子字符串）
+        if not matches:
+            for item in self.work_directory.iterdir():
+                if text.lower() in item.name.lower():
+                    matches.append(item.name)
+        
+        # 4. 如果文件名部分看起来像是不完整的扩展名，尝试补全
+        if not matches and '.' in text:
+            # 例如：输入"test.t"时，尝试匹配"test.txt"
+            base_name, partial_ext = text.rsplit('.', 1)
+            for ext in common_extensions:
+                if ext.startswith('.' + partial_ext):
+                    potential_file = self.work_directory / (base_name + ext)
+                    if potential_file.exists() and potential_file.is_file():
+                        matches.append(base_name + ext)
+        
+        return matches
+    
+    def _get_root_directory_completions(self, separator: str, file_part: str = "") -> List[str]:
+        """
+        获取根目录补全
+        Args:
+            separator: 路径分隔符
+            file_part: 文件名部分（可选）
+        Returns:
+            根目录下的文件/文件夹列表
+        """
+        try:
+            import platform
+            
+            if platform.system() == "Windows":
+                # Windows系统：获取当前驱动器的根目录
+                current_drive = Path.cwd().anchor  # 例如 'C:\\'
+                root_dir = Path(current_drive)
+            else:
+                # Unix系统：根目录是 '/'
+                root_dir = Path('/')
+            
+            if not root_dir.exists() or not root_dir.is_dir():
+                return []
+            
+            matches = []
+            try:
+                for item in root_dir.iterdir():
+                    # 跳过隐藏文件和系统文件
+                    if item.name.startswith('.'):
+                        continue
+                    
+                    # 如果指定了file_part，只返回匹配的文件
+                    if file_part and not item.name.lower().startswith(file_part.lower()):
+                        continue
+                    
+                    # 构建路径
+                    if separator == '/':
+                        path = f"/{item.name}"
+                    else:
+                        path = f"\\{item.name}"
+                    
+                    matches.append(path)
+                    
+            except PermissionError:
+                # 如果没有权限访问根目录，返回空列表
+                return []
+            
             return sorted(matches)
         except Exception:
             return []
@@ -156,6 +256,10 @@ class FileCompleter(Completer):
             else:
                 separator = '\\'
             
+            # 特殊处理：如果输入只是单个分隔符，显示根目录内容
+            if text == '\\' or text == '/':
+                return self._get_root_directory_completions(separator)
+            
             parts = text.split(separator)
             if len(parts) == 1:
                 return self._get_local_completions(text)
@@ -163,6 +267,10 @@ class FileCompleter(Completer):
             # 构建目录路径
             dir_part = separator.join(parts[:-1])
             file_part = parts[-1]
+            
+            # 特殊处理：如果dir_part为空，表示根目录
+            if dir_part == '':
+                return self._get_root_directory_completions(separator, file_part)
             
             # 解析目录路径
             if dir_part.startswith('/') or (len(dir_part) > 1 and dir_part[1] == ':'):
@@ -179,13 +287,24 @@ class FileCompleter(Completer):
             matches = []
             for item in base_dir.iterdir():
                 if item.name.lower().startswith(file_part.lower()):
-                    # 构建完整路径
-                    full_path = str(base_dir / item.name)
+                    # 构建相对路径，保持原始分隔符风格
+                    if separator == '/':
+                        # Unix风格路径
+                        relative_path = f"{dir_part}/{item.name}"
+                    else:
+                        # Windows风格路径
+                        relative_path = f"{dir_part}\\{item.name}"
+                    
                     # 如果原始文本以分隔符结尾，保持分隔符
                     if text.endswith(separator):
-                        matches.append(full_path + separator)
+                        matches.append(relative_path + separator)
                     else:
-                        matches.append(full_path)
+                        matches.append(relative_path)
+            
+            # 如果没有找到匹配项，尝试智能补全
+            if not matches and file_part:
+                smart_matches = self._smart_path_completion(base_dir, file_part, separator, dir_part)
+                matches.extend(smart_matches)
             
             # 如果只有一个匹配项，直接返回
             if len(matches) == 1:
@@ -195,6 +314,68 @@ class FileCompleter(Completer):
             return sorted(matches)
         except Exception:
             return []
+    
+    def _smart_path_completion(self, base_dir: Path, file_part: str, separator: str, dir_part: str) -> List[str]:
+        """
+        智能路径补全，包括自动添加常见文件扩展名
+        Args:
+            base_dir: 基础目录
+            file_part: 文件名部分
+            separator: 路径分隔符
+            dir_part: 当前目录路径部分
+        Returns:
+            智能补全的路径列表
+        """
+        matches = []
+        
+        # 常见文件扩展名
+        common_extensions = ['.txt', '.py', '.js', '.html', '.css', '.json', '.xml', '.md', '.log', '.ini', '.cfg', '.conf']
+        
+        # 1. 尝试直接匹配（不区分大小写）
+        for item in base_dir.iterdir():
+            if item.name.lower().startswith(file_part.lower()):
+                if separator == '/':
+                    relative_path = f"{dir_part}/{item.name}"
+                else:
+                    relative_path = f"{dir_part}\\{item.name}"
+                matches.append(relative_path)
+        
+        # 2. 如果没有直接匹配，尝试添加常见扩展名
+        if not matches:
+            for ext in common_extensions:
+                potential_file = base_dir / (file_part + ext)
+                if potential_file.exists() and potential_file.is_file():
+                    if separator == '/':
+                        relative_path = f"{dir_part}/{file_part}{ext}"
+                    else:
+                        relative_path = f"{dir_part}\\{file_part}{ext}"
+                    matches.append(relative_path)
+        
+        # 3. 如果还是没有，尝试模糊匹配（包含子字符串）
+        if not matches:
+            for item in base_dir.iterdir():
+                if file_part.lower() in item.name.lower():
+                    if separator == '/':
+                        relative_path = f"{dir_part}/{item.name}"
+                    else:
+                        relative_path = f"{dir_part}\\{item.name}"
+                    matches.append(relative_path)
+        
+        # 4. 如果文件名部分看起来像是不完整的扩展名，尝试补全
+        if not matches and '.' in file_part:
+            # 例如：输入"test.t"时，尝试匹配"test.txt"
+            base_name, partial_ext = file_part.rsplit('.', 1)
+            for ext in common_extensions:
+                if ext.startswith('.' + partial_ext):
+                    potential_file = base_dir / (base_name + ext)
+                    if potential_file.exists() and potential_file.is_file():
+                        if separator == '/':
+                            relative_path = f"{dir_part}/{base_name}{ext}"
+                        else:
+                            relative_path = f"{dir_part}\\{base_name}{ext}"
+                        matches.append(relative_path)
+        
+        return matches
     
     def _find_common_prefix(self, strings: List[str]) -> str:
         """找到字符串列表的共同前缀"""
