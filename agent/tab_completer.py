@@ -59,13 +59,6 @@ class TabCompleter:
             # 第一次调用，生成补全列表
             self._completions = self._get_completions(text)
             self._completion_index = 0
-            
-            # 如果有多个匹配项，显示所有选项
-            if len(self._completions) > 1:
-                print(f"\n可用的补全选项:")
-                for completion in self._completions:
-                    print(f"  {completion}")
-                print()
         
         if self._completion_index < len(self._completions):
             result = self._completions[self._completion_index]
@@ -223,6 +216,10 @@ class TabCompleter:
             else:
                 return self._get_local_completions(text)
             
+            # 特殊处理：如果输入只是单个分隔符，显示根目录内容
+            if text == '\\' or text == '/':
+                return self._get_root_directory_completions(separator)
+            
             # 统一路径分隔符进行处理
             normalized_text = text.replace('\\', '/') if separator == '/' else text.replace('/', '\\')
             parts = normalized_text.split(separator)
@@ -233,6 +230,10 @@ class TabCompleter:
             # 构建目录路径
             dir_part = separator.join(parts[:-1])
             file_part = parts[-1]
+            
+            # 特殊处理：如果dir_part为空，表示根目录
+            if dir_part == '':
+                return self._get_root_directory_completions(separator, file_part)
             
             # 解析目录路径
             base_dir = self._resolve_directory_path(dir_part)
@@ -251,8 +252,8 @@ class TabCompleter:
                         # Windows风格路径
                         relative_path = f"{dir_part}\\{item.name}"
                     
-                    # 如果原始文本以分隔符结尾，保持分隔符
-                    if text.endswith(separator):
+                    # 只有在目录项且原始文本以分隔符结尾时才添加分隔符
+                    if text.endswith(separator) and item.is_dir():
                         matches.append(relative_path + separator)
                     else:
                         matches.append(relative_path)
@@ -357,6 +358,60 @@ class TabCompleter:
                         matches.append(relative_path)
         
         return matches
+    
+    def _get_root_directory_completions(self, separator: str, file_part: str = "") -> List[str]:
+        """
+        获取根目录补全
+        Args:
+            separator: 路径分隔符
+            file_part: 文件名部分（可选）
+        Returns:
+            根目录下的文件/文件夹列表
+        """
+        try:
+            import platform
+            
+            if platform.system() == "Windows":
+                # Windows系统：获取当前驱动器的根目录
+                current_drive = Path.cwd().anchor  # 例如 'C:\\'
+                root_dir = Path(current_drive)
+            else:
+                # Unix系统：根目录是 '/'
+                root_dir = Path('/')
+            
+            if not root_dir.exists() or not root_dir.is_dir():
+                return []
+            
+            matches = []
+            try:
+                for item in root_dir.iterdir():
+                    # 跳过隐藏文件和系统文件
+                    if item.name.startswith('.'):
+                        continue
+                    
+                    # 如果指定了file_part，只返回匹配的文件
+                    if file_part and not item.name.lower().startswith(file_part.lower()):
+                        continue
+                    
+                    # 构建路径
+                    if separator == '/':
+                        path = f"/{item.name}"
+                    else:
+                        path = f"\\{item.name}"
+                    
+                    # 只有在目录项且file_part为空时才添加分隔符
+                    if not file_part and item.is_dir():
+                        path += separator
+                    
+                    matches.append(path)
+                    
+            except PermissionError:
+                # 如果没有权限访问根目录，返回空列表
+                return []
+            
+            return sorted(matches)
+        except Exception:
+            return []
     
     def update_work_directory(self, new_directory: Path):
         """更新工作目录"""
