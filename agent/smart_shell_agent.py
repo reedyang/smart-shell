@@ -2088,7 +2088,7 @@ big_image.jpg
         import sys
         import platform
         
-        prompt = f"👤 [{str(self.work_directory)}]: "
+        prompt = f"🤖 [{str(self.work_directory)}]: "
         
         # 重置历史记录索引
         self.history_manager.reset_index()
