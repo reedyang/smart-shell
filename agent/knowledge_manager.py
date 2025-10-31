@@ -21,8 +21,27 @@ try:
     )
     try:
         from langchain_ollama import OllamaEmbeddings
+        OLLAMA_EMBEDDINGS_SRC = "langchain_ollama"
     except ImportError:
-        from langchain_community.embeddings import OllamaEmbeddings
+        try:
+            from langchain_community.embeddings import OllamaEmbeddings
+            OLLAMA_EMBEDDINGS_SRC = "langchain_community"
+            # The LangChain-provided OllamaEmbeddings is deprecated; advise user to install the
+            # standalone package and suppress the deprecated-warning to reduce noise.
+            import warnings
+            try:
+                # Prefer to silence the specific LangChainDeprecationWarning if available
+                from langchain.schema import LangChainDeprecationWarning
+                warnings.filterwarnings("ignore", category=LangChainDeprecationWarning)
+            except Exception:
+                # Fallback: ignore warnings mentioning OllamaEmbeddings
+                warnings.filterwarnings("ignore", ".*OllamaEmbeddings.*")
+            logging.warning(
+                "OllamaEmbeddings from LangChain is deprecated. "
+                "Install/upgrade the standalone package to avoid this warning: `pip install -U langchain-ollama`."
+            )
+        except ImportError:
+            OLLAMA_EMBEDDINGS_SRC = None
     KNOWLEDGE_AVAILABLE = True
 except ImportError as e:
     KNOWLEDGE_AVAILABLE = False
@@ -91,8 +110,16 @@ class KnowledgeManager:
     def _init_chroma_db(self):
         """初始化Chroma数据库"""
         try:
-            # 初始化Ollama嵌入模型
-            self.embeddings = OllamaEmbeddings(model=self.embedding_model)
+            # 初始化Ollama嵌入模型（仅在官方独立包可用时实例化）
+            if OLLAMA_EMBEDDINGS_SRC == "langchain_ollama":
+                self.embeddings = OllamaEmbeddings(model=self.embedding_model)
+            else:
+                # 如果没有可用的 langchain_ollama 包，跳过实例化以避免使用被弃用的实现。
+                self.embeddings = None
+                logging.info(
+                    "OllamaEmbeddings (langchain_ollama) not available; "
+                    "falling back to local SentenceTransformer embeddings when needed."
+                )
             
             # 初始化Chroma客户端
             self.client = chromadb.PersistentClient(

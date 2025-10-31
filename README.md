@@ -167,43 +167,6 @@ brew install ffmpeg      # macOS
 
 ## 🐛 故障排除
 
-### 中文输入问题
-
-如果遇到中文输入问题：
-
-1. **确保安装了prompt_toolkit**
-   ```bash
-   pip install prompt_toolkit
-   ```
-
-2. **运行测试脚本验证功能**
-   ```bash
-   python quick_test.py
-   ```
-
-3. **检查终端编码设置**
-   确保终端设置为UTF-8编码
-
-### Tab补全问题
-
-如果遇到Tab补全问题：
-
-1. **Windows用户**: 确保已安装 `prompt_toolkit`
-   ```bash
-   pip install prompt_toolkit
-   ```
-
-2. **Unix用户**: 确保系统支持readline
-   ```bash
-   # Ubuntu/Debian
-   sudo apt install libreadline-dev
-   ```
-
-### 显示问题
-
-- 如果遇到显示问题，程序会自动回退到标准input()函数
-- 确保终端支持ANSI转义序列
-
 ### 模型配置问题
 
 - 确保配置文件格式正确（JSON格式）
@@ -212,7 +175,7 @@ brew install ffmpeg      # macOS
 
 ### 知识库问题
 
-- 确保已安装知识库相关依赖：`pip install chromadb langchain sentence-transformers`
+- 确保已安装知识库相关依赖：`pip install chromadb langchain langchain-experimental sentence-transformers`
 - 对于知识库向量化，需要安装并运行Ollama服务
 - 确保知识库目录 `.smartshell/knowledge/` 存在且有读取权限
 - 如果知识库初始化失败，程序会继续运行但不会使用知识库功能
